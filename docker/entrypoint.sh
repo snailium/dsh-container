@@ -26,7 +26,7 @@ log()  { echo "[entrypoint] $*"; }   # 定义在最先, 供下方 S1 校验使�
 # ---------------------------------------------------------------------------
 is_loopback() { # 检测 host 部分是否 loopback (含 IPv6 [::1] 方括号形式, review L1)
   case "${1%%:*}" in
-    localhost|127.*|::1|"[::1"|"["*) return 0 ;;
+    localhost|127.*|::1|"["*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -95,32 +95,34 @@ else
   generate_cert_linux
 fi
 # chown 需 root 权限(entrypoint 以 root 运行才有)。降权后的工作进程(node)才能读证书。
+# ⚠️ DSH_RUN_UID/GID 只决定数据/证书 chown 目标, 不改运行时 uid(永远是镜像内 node 用户=1000)。
+#   仅当你在 Dockerfile 改了 node 用户 uid 时才需要设它们; 否则保持默认 1000:1000(review K1)。
 : "${DSH_RUN_UID:=1000}" "${DSH_RUN_GID:=1000}"   # set -u 安全默认
 chmod 600 "$KEY_PEM" "$SERVER_PEM" 2>/dev/null || true
 chown "$DSH_RUN_UID:$DSH_RUN_GID" "$CERT_PEM" "$KEY_PEM" "$SERVER_PEM" 2>/dev/null || true
 # 降权(非root)工作进程需能写 dsh 运行时数据目录。既有 root 属主目录(旧部署产物)需归给运行用户。
-#   ⚠️ 不无条件 chown(C1 修复): 仅当属主为 root 且运行用户不可写时才接管——避免跨主机
-#   把宿主用户自己的数据目录(.credentials.yaml 等)改成 1000:1000。已属运行用户的不动, 也省下
-#   对大型 sessions/ 的无谓递归 chown。
-ensure_writable() { # $1=路径; 属主为DSH_RUN_UID 或可写 → 不动; 否则 chown -R
+#   ⚠️ 不无条件 chown(C1/T2 修复): **仅接管 root(0) 属主的遗留产物**——绝不碰其它 uid
+#   的宿主用户数据目录(.credentials.yaml 等由宿主用户所有时不能改成 1000:1000)。
+#   已属运行用户(或其它非 root uid)的一律不动, 也省下对大型 sessions/ 的无谓递归 chown。
+ensure_owned_by_process() { # $1=路径; 仅当属主为 root 时 chown 给运行用户
   [ -z "$1" ] && return 0
   local owner
   owner=$(stat -c %u "$1" 2>/dev/null || echo "")
-  if [ -n "$owner" ] && [ "$owner" != "$DSH_RUN_UID" ]; then
+  if [ "$owner" = "0" ]; then
     chown -R "$DSH_RUN_UID:$DSH_RUN_GID" "$1" 2>/dev/null || true
   fi
 }
 for sub in sessions storages integrations profiles; do
-  [ -e "$DSH_HOME/$sub" ] && ensure_writable "$DSH_HOME/$sub"
+  [ -e "$DSH_HOME/$sub" ] && ensure_owned_by_process "$DSH_HOME/$sub"
 done
-ensure_writable "$DSH_HOME/settings.yaml"
-ensure_writable "$DSH_HOME/.credentials.yaml"
-# $DSH_HOME 根本身: 运行用户可写则不动(root属主时接管)
+ensure_owned_by_process "$DSH_HOME/settings.yaml"
+ensure_owned_by_process "$DSH_HOME/.credentials.yaml"
+# $DSH_HOME 根本身: 也仅当属主为 root 时接管(与子路径一致, review T2)
 owner=$(stat -c %u "$DSH_HOME" 2>/dev/null || echo "")
-if [ -n "$owner" ] && [ "$owner" != "$DSH_RUN_UID" ]; then
+if [ "$owner" = "0" ]; then
   chown "$DSH_RUN_UID:$DSH_RUN_GID" "$DSH_HOME" 2>/dev/null || true
 fi
-log "运行数据所有权检查完成 (仅接管非 $DSH_RUN_UID 属主路径)"
+log "运行数据所有权检查完成 (仅接管 root 属主的遗留产物, 不改动其它 uid 宿主数据)"
 
 # ---------------------------------------------------------------------------
 # 2) 启动 TLS relay + dsh web 双进程, 互相看护

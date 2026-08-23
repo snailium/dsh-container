@@ -33,7 +33,7 @@ services:
     #   DSH_WORKSPACE_DIR→ Telegram 机器人绑定的工作区, 必须同路径挂载
     # 两者均强制必填(:?)——缺失会静默挂载 root 属主的默认路径, node 用户写不进去(见 review S4)
     volumes:
-      - ${DSH_DATA_DIR:?请在 .env 设置 DSH_DATA_DIR=harnes-home 宿主路径}:/dsh-home
+      - ${DSH_DATA_DIR:?请在 .env 设置 DSH_DATA_DIR=harness-home 宿主路径}:/dsh-home
       # 工作区同路径挂载(dsh-im workspace 绑定), 缺失会导致会话记录错乱分叉
       - ${DSH_WORKSPACE_DIR:?请在 .env 设置 DSH_WORKSPACE_DIR=dsh-im 工作区宿主路径}:${DSH_WORKSPACE_DIR:?请在 .env 设置 DSH_WORKSPACE_DIR=dsh-im 工作区宿主路径}
     logging:

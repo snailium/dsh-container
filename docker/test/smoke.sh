@@ -44,27 +44,34 @@ else
   exit 1
 fi
 
-echo "### 5. 看护自愈: 杀 dsh web 进程, 验证 5-10s 内自动拉起 (review W1) ###"
-# 找到 dsh web 主进程 PID 并杀掉, 验证 entrypoint 看护循环能重启它(不因命令替换死锁)
-DSH_WEB_PID=$(docker exec "$NAME" sh -c 'pgrep -f "dsh web" | head -1' 2>/dev/null)
+echo "### 5. 看护自愈: 杀 dsh web worker, 验证 5-10s 内自动拉起 (review W1/T1) ###"
+# 必须精确杀 node worker(-u node 排除 root 的 runuser wrapper): 否则杀 wrapper 而 worker
+# 存活 → watchdog 重启因 3080 被孤儿 worker 占用 EADDRINUSE 秒崩, 且 heal 判定是假阳性,
+# 测不到真正的 W1 重启路径(见 review T1)。
+DSH_WEB_PID=$(docker exec "$NAME" sh -c 'pgrep -u node -f "dsh web" | head -1' 2>/dev/null)
 if [ -z "$DSH_WEB_PID" ]; then
-  echo "⚠ 找不到 dsh web 进程, 跳过自愈验证" >&2
+  echo "⚠ 找不到 dsh web worker 进程, 跳过自愈验证" >&2
 else
-  echo "  杀掉 dsh web (PID $DSH_WEB_PID)..."
+  echo "  杀掉 dsh web worker (PID $DSH_WEB_PID)..."
   docker exec "$NAME" sh -c "kill -9 $DSH_WEB_PID" 2>/dev/null
-  # 看护循环 5s 一轮, 给 10s 观察窗口
+  # 杀后先确认端口释放, 再等自愈(避免误判)
+  sleep 1
+  # 看护循环 5s 一轮, 给 12s 观察窗口
   HEALED=0
-  for i in $(seq 1 10); do
+  for i in $(seq 1 12); do
     sleep 1
-    NEWPID=$(docker exec "$NAME" sh -c 'pgrep -f "dsh web" | head -1' 2>/dev/null)
+    NEWPID=$(docker exec "$NAME" sh -c 'pgrep -u node -f "dsh web" | head -1' 2>/dev/null)
     if [ -n "$NEWPID" ] && [ "$NEWPID" != "$DSH_WEB_PID" ]; then
-      echo "  ✓ 已自愈: 新 PID=$NEWPID (原=$DSH_WEB_PID)"
-      HEALED=1
-      break
+      # 新 worker PID 必须存活且 3080 恢复
+      if docker exec "$NAME" sh -c 'curl -fsS http://127.0.0.1:3080/ >/dev/null 2>&1'; then
+        echo "  ✓ 已自愈: 新 PID=$NEWPID (原=$DSH_WEB_PID), 3080 恢复"
+        HEALED=1
+        break
+      fi
     fi
   done
   if [ "$HEALED" != "1" ]; then
-    echo "❌ FAIL: dsh web 被杀后 10s 内未恢复(看护死锁 W1)" >&2
+    echo "❌ FAIL: dsh web worker 被杀后 12s 内未恢复(看护死锁 W1)" >&2
     docker rm -f "$NAME" >/dev/null 2>&1
     exit 1
   fi
