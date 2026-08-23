@@ -5,6 +5,12 @@ on:
   schedule:
     - cron: "0 */6 * * *"   # 每6小时
   workflow_dispatch:        # 手动触发
+    inputs:
+      force:
+        description: '强制重建并推送(即使版本已存在)'
+        required: false
+        type: boolean
+        default: false
 
 # GITHUB_TOKEN 对当前仓库的 repo-scoped 容器包有 packages:write(推镜像)
 permissions:
@@ -44,8 +50,11 @@ jobs:
           GH_PAT: ${{ secrets.GITHUB_TOKEN }}
         run: |
           V="${{ steps.npm.outputs.latest }}"
-          # 尝试拉取该 tag 看是否已存在; 不存在则需构建
-          if docker manifest inspect "${IMAGE}:${V}" >/dev/null 2>&1; then
+          # force 输入强制重建(跳过"已存在"检查); 否则版本已存在则跳过
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            echo "ALREADY_EXISTS=0" >> "$GITHUB_ENV"
+            echo "force rebuild — $V"
+          elif docker manifest inspect "${IMAGE}:${V}" >/dev/null 2>&1; then
             echo "ALREADY_EXISTS=1" >> "$GITHUB_ENV"
             echo "$V already built — skip"
           else
