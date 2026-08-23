@@ -1,5 +1,6 @@
 # 敏感/本地部署配置, 绝不入库
 .env
+.env.*
 harness-home
 node_modules
 *.log
