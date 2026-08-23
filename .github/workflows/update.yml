@@ -1,0 +1,68 @@
+name: Auto-update dsh image
+
+# 定时轮询上游 npm dist-tags.latest, 有新版则重建镜像并推 ghcr.io/snailium/dsh
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # 每6小时
+  workflow_dispatch:        # 手动触发
+
+# 只要 write:packages 的 PAT (私有仓库, 无需 visibility API)
+permissions:
+  packages: write
+  contents: read
+
+env:
+  IMAGE: ghcr.io/snailium/dsh
+
+jobs:
+  check-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 查上游 npm latest 版本
+        id: npm
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const res = await fetch('https://registry.npmjs.org/@deepseek-ai/dsh/latest');
+            const pkg = await res.json();
+            const latest = pkg.version;
+            core.setOutput('latest', latest);
+            console.log('upstream latest:', latest);
+
+      - name: 登录 ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 检查是否已有该版本镜像
+        id: probe
+        env:
+          GH_PAT: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          V="${{ steps.npm.outputs.latest }}"
+          # 尝试拉取该 tag 看是否已存在; 不存在则需构建
+          if docker manifest inspect "${IMAGE}:${V}" >/dev/null 2>&1; then
+            echo "ALREADY_EXISTS=1" >> "$GITHUB_ENV"
+            echo "$V already built — skip"
+          else
+            echo "ALREADY_EXISTS=0" >> "$GITHUB_ENV"
+            echo "new version $V — building"
+          fi
+
+      - name: 检出源码(含 Dockerfile/entrypoint/relay)
+        if: env.ALREADY_EXISTS == '0'
+        uses: actions/checkout@v4
+
+      - name: 构建并推送
+        if: env.ALREADY_EXISTS == '0'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          build-args: DSH_VERSION=${{ steps.npm.outputs.latest }}
+          push: true
+          tags: |
+            ${IMAGE}:${{ steps.npm.outputs.latest }}
+            ${IMAGE}:latest

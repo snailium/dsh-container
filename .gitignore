@@ -1,0 +1,6 @@
+# 敏感/本地部署配置, 绝不入库
+.env
+harness-home
+node_modules
+*.log
+.DS_Store

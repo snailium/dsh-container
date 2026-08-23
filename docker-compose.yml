@@ -1,0 +1,40 @@
+# DeepSeek Harness (dsh) 容器化部署
+# 用法: docker compose up -d        (首次)
+#       docker compose pull && docker compose up -d   (升级)
+services:
+  dsh:
+    image: ghcr.io/snailium/dsh:latest
+    build:
+      context: .
+      args:
+        DSH_VERSION: ${DSH_VERSION:-0.1.1-rc.2}   # 绑 npm version; 可用 .env 覆盖
+    container_name: dsh
+    restart: unless-stopped        # 替代 systemd 的重启策略
+    # host 网络: 直接访问 .101/.102 模型端点 + relay 绑任意端口, 免端口映射
+    network_mode: host
+    environment:
+      # --- 数据卷根 ---
+      DSH_HOME: /dsh-home
+      # --- 上游/端点凭据 (llama.cpp/vLLM 不校验 key 值, 但 dsh 依此做存在性检查) ---
+      OLLAMA_API_KEY: ollama-local
+      B70_API_KEY: local-b70
+      # --- HTTPS 访问端口 (env 可改, 避免端口冲突) ---
+      DSH_HTTPS_PORT: ${DSH_HTTPS_PORT:-8443}
+      # --- 受信权威(relay把外部 Host 重写为它); 真实 IP 经 .env 注入 ---
+      #     copy .env.example → .env, 填你实际的局域网 IP
+      DSH_LAN_IP: ${DSH_LAN_IP:-localhost}
+      DSH_TRUSTED_AUTHORITY: ${DSH_LAN_IP:-localhost}:3080
+      # --- dsh web 监听 ---
+      DSH_WEB_PORT: ${DSH_WEB_PORT:-3080}
+    # 数据卷: bind-mount 现有 harness-home (settings/配置/sessions/集成/TLS 全复用)
+    volumes:
+      - /home/user/harness-home:/dsh-home
+    # TLS 证书也在 /dsh-home/tls (数据卷), 会由 entrypoint 自动生成/导入
+    # 若需独立证书目录:
+    #   - /home/user/harness-home:/dsh-home
+    #   - /path/to/my-certs:/dsh-home/tls
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,0 +1,7 @@
+# 不要打进镜像的本地/敏感文件
+harness-home
+node_modules
+.git
+*.log
+**/.DS_Store
+.dockerignore
