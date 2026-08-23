@@ -78,6 +78,9 @@ function headIsUpgrade(head) {
   return false;
 }
 
+// 仅直接执行时(require.main===module)才启动 TLS server (review R1)。
+// require(模块)仅供单元测试取纯函数, 不应真实监听端口/持有端口。
+if (require.main === module) {
 const server = tls.createServer({ cert: loadKeyCert(), key: loadKeyCert(), ciphers: "DEFAULT" }, (client) => {
   client.setNoDelay(true);
   const upstream = new net.Socket();
@@ -204,9 +207,8 @@ server.on("tls_client_error", (err, socket) => {
 server.listen(Number(port), bindAddr, () => {
   console.log(`DSH TLS relay: https://${bindAddr}:${port} -> http://${targetHost}:${targetPort} (trusted-as ${trustedAuthority}, per-request rewrite)`);
 });
-
-// 测试钩子: require 时(非直接执行)导出纯函数供单元测试, 不启动 server
-if (require.main !== module) {
+} else {
+  // require(模块)仅导出纯函数供单元测试, 不启动 server(review R1)
   module.exports = {
     rewriteHead,
     headBodyState,

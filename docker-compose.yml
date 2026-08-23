@@ -22,19 +22,20 @@ services:
       DSH_HTTPS_PORT: ${DSH_HTTPS_PORT:-8443}
       # --- 受信权威(relay把外部 Host 重写为它) ---
       # DSH_LAN_IP 强制必填(无默认): 见 review S1, 缺省 loopback 会导致特权面暴露全网。
-      #   DSH_TRUSTED_AUTHORITY 独立可配; 不设则自动 = ${DSH_LAN_IP}:3080 (见 M6)。
+      #   DSH_TRUSTED_AUTHORITY 独立可配; 不设则自动 = ${DSH_LAN_IP}:${DSH_WEB_PORT} (见 P1, 跟随 web 端口)。
       #   ⚠️ 此值必须与 entrypoint 传给 dsh 的 --trusted-host 一致(Origin 校验: origin.host===host.host)。
       DSH_LAN_IP: ${DSH_LAN_IP:?请在 .env 设置 DSH_LAN_IP=你的部署机实际局域网 IP}
-      DSH_TRUSTED_AUTHORITY: ${DSH_TRUSTED_AUTHORITY:-${DSH_LAN_IP}:3080}
+      DSH_TRUSTED_AUTHORITY: ${DSH_TRUSTED_AUTHORITY:-${DSH_LAN_IP}:${DSH_WEB_PORT:-3080}}
       # --- dsh web 监听 ---
       DSH_WEB_PORT: ${DSH_WEB_PORT:-3080}
     # 数据卷: 路径在 .env 里填(DSH_DATA_DIR / DSH_WORKSPACE_DIR), 仓库不含内部路径
     #   DSH_DATA_DIR     → $DSH_HOME(settings/sessions/profiles/TLS)
     #   DSH_WORKSPACE_DIR→ Telegram 机器人绑定的工作区, 必须同路径挂载
+    # 两者均强制必填(:?)——缺失会静默挂载 root 属主的默认路径, node 用户写不进去(见 review S4)
     volumes:
-      - ${DSH_DATA_DIR:-/data/harness-home}:/dsh-home
+      - ${DSH_DATA_DIR:?请在 .env 设置 DSH_DATA_DIR=harnes-home 宿主路径}:/dsh-home
       # 工作区同路径挂载(dsh-im workspace 绑定), 缺失会导致会话记录错乱分叉
-      - ${DSH_WORKSPACE_DIR:-/data/deepseek-harness}:${DSH_WORKSPACE_DIR:-/data/deepseek-harness}
+      - ${DSH_WORKSPACE_DIR:?请在 .env 设置 DSH_WORKSPACE_DIR=dsh-im 工作区宿主路径}:${DSH_WORKSPACE_DIR:?请在 .env 设置 DSH_WORKSPACE_DIR=dsh-im 工作区宿主路径}
     logging:
       driver: json-file
       options:

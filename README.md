@@ -98,7 +98,7 @@ docker compose up -d       # 重建容器, 数据卷原样复用
 
 ### 强制防护(本项目已内置)
 - **fail-closed 启动校验** (审查 S1): `DSH_LAN_IP` 必填(compose 校验 + entrypoint 双重保证), 缺省 loopback 时拒绝启动——绝不把特权面(bind-mount 的配置/凭据/TLS 私钥)暴露给全网
-- **非 root 运行** (审查 H1): 容器内 `USER node` (uid 1000), dsh 进程无 root 权限
+- **非 root 运行** (审查 H1): entrypoint(以 root 启动以管理证书/chown) 用 `runuser -u node` 降权启动 dsh/relay 工作进程, 进程属主为 node(uid 1000), 无 root 权限
 - **特权方法隔离**: dsh 的 `settings.*`/`credentials.*`/`host.pickDirectory`/`llm.discoverModels` 只认 loopback Host, 远程始终 403(改 Models 走配置驱动)
 - image 内不烘焙任何密钥/配置; 全运行时挂卷
 
