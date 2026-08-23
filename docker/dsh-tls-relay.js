@@ -30,14 +30,14 @@ const fs = require("node:fs");
 const [
   bindAddr = "0.0.0.0",
   port = 8443,
-  certFile = "/home/user/deepseek-harness/tls/server.pem",
+  certFile = process.env.DSH_TLS_CERT || "/path/to/server.pem",
   targetHost = "127.0.0.1",
   targetPort = 3080,
-  trustedAuthority = "192.168.1.1:3080",
+  trustedAuthority = process.env.DSH_TRUSTED_AUTHORITY || "192.168.1.1:3080",
 ] = process.argv.slice(2);
 
 const MAX_HEAD_BYTES = 64 * 1024;
-const keyCert = fs.readFileSync(certFile); // combined cert + private key
+const loadKeyCert = () => fs.readFileSync(certFile); // 惰性读取(combined cert + private key); require 测试时不触发
 
 /** Rewrite the Host/Origin authority lines of one completed head (latin1-safe). */
 function rewriteHead(head, authority) {
@@ -78,7 +78,7 @@ function headIsUpgrade(head) {
   return false;
 }
 
-const server = tls.createServer({ cert: keyCert, key: keyCert, ciphers: "DEFAULT" }, (client) => {
+const server = tls.createServer({ cert: loadKeyCert(), key: loadKeyCert(), ciphers: "DEFAULT" }, (client) => {
   client.setNoDelay(true);
   const upstream = new net.Socket();
   upstream.setNoDelay(true);
@@ -204,3 +204,13 @@ server.on("tls_client_error", (err, socket) => {
 server.listen(Number(port), bindAddr, () => {
   console.log(`DSH TLS relay: https://${bindAddr}:${port} -> http://${targetHost}:${targetPort} (trusted-as ${trustedAuthority}, per-request rewrite)`);
 });
+
+// 测试钩子: require 时(非直接执行)导出纯函数供单元测试, 不启动 server
+if (require.main !== module) {
+  module.exports = {
+    rewriteHead,
+    headBodyState,
+    headIsUpgrade,
+    MAX_HEAD_BYTES,
+  };
+}

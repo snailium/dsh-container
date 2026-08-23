@@ -1,18 +1,18 @@
 name: Auto-update dsh image
 
-# 定时轮询上游 npm dist-tags.latest, 有新版则重建镜像并推 ghcr 的 repo-scoped 包
+# 定时轮询上游 npm dist-tags.latest, 有新版则重建 + 冒烟验证 + 推 ghcr 的 repo-scoped 包
 on:
   schedule:
     - cron: "0 */6 * * *"   # 每6小时
   workflow_dispatch:        # 手动触发
 
-# 只要 write:packages 的 PAT (私有仓库, 无需 visibility API)
+# GITHUB_TOKEN 对当前仓库的 repo-scoped 容器包有 packages:write(推镜像)
 permissions:
   packages: write
   contents: read
 
 env:
-  # repo-scoped 包: ghcr.io/snailium/<repo>/<img> — 用 GITHUB_TOKEN 即可推(关联当前 repo),
+  # repo-scoped 包: ghcr.io/snailium/<repo>/<img> — GITHUB_TOKEN 即可推(关联当前 repo)
   #   user-scoped(ghcr.io/snailium/...) 需额外 PAT, GITHUB_TOKEN 会 denied
   IMAGE: ghcr.io/snailium/dsh-container/dsh
 
@@ -53,19 +53,36 @@ jobs:
             echo "new version $V — building"
           fi
 
-      - name: 检出源码(含 Dockerfile/entrypoint/relay)
+      - name: 检出源码(含 Dockerfile/entrypoint/relay/test)
         if: env.ALREADY_EXISTS == '0'
         uses: actions/checkout@v4
 
-      - name: 构建并推送
+      - name: 构建镜像(仅 build+load, 不 push)
         if: env.ALREADY_EXISTS == '0'
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           build-args: DSH_VERSION=${{ steps.npm.outputs.latest }}
-          push: true
-          # build-push-action 的 tags 不做 shell 变量展开, 需用 env.IMAGE 显式引用
+          load: true
           tags: |
-            ${{ env.IMAGE }}:${{ steps.npm.outputs.latest }}
-            ${{ env.IMAGE }}:latest
+            smoke:latest
+          ### build-push-action 的 tags 用固定本地名; 冒烟通过后再手动推送(见下) ###
+
+      - name: 仓库内单元测试(relay 纯函数)
+        if: env.ALREADY_EXISTS == '0'
+        run: node docker/test/dsh-tls-relay.test.js
+
+      - name: 冒烟测试(起容器, 验证书/web/relay/非root)
+        if: env.ALREADY_EXISTS == '0'
+        run: bash docker/test/smoke.sh smoke:latest
+
+      - name: 推送镜像到 ghcr(冒烟通过后)
+        if: env.ALREADY_EXISTS == '0'
+        run: |
+          V="${{ steps.npm.outputs.latest }}"
+          docker tag smoke:latest "${IMAGE}:${V}"
+          docker tag smoke:latest "${IMAGE}:latest"
+          docker push "${IMAGE}:${V}"
+          docker push "${IMAGE}:latest"
+          echo "pushed ${IMAGE}:${V} + :latest"

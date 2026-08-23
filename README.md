@@ -6,10 +6,13 @@
 
 ## 🚀 快速开始
 
+> **平台要求：仅 Linux**（`network_mode: host` 依赖 Linux 语义，macOS/Windows 会静默失效，见安全章）。
+
 ```bash
-cp .env.example .env     # 填你的 DSH_LAN_IP 等实际值
+cp .env.example .env     # 必填 DSH_LAN_IP (你的部署机局域网 IP)
 docker compose up -d     # 启动
 ```
+> `DSH_LAN_IP` 为强制项: 不填则 compose 拒绝启动(fail-closed)。这是**刻意为之**——缺省 loopback 会让 dsh 特权方法暴露全网(见安全章)。
 
 ## 🧱 镜像构建与上游绑定
 
@@ -32,8 +35,9 @@ docker compose up -d     # 启动
 |---|---|---|
 | `DSH_WEB_PORT` | 3080 | dsh web HTTP 监听端口 |
 | `DSH_HTTPS_PORT` | 8443 | HTTPS(TLS relay)访问端口 |
-| `DSH_LAN_IP` | localhost | 证书 SAN + trusted-host 用的局域网 IP (**在 .env 填实际值**) |
-| `DSH_TRUSTED_AUTHORITY` | {LAN_IP}:3080 | relay 把外部 Host 重写成的受信权威 |
+| `DSH_LAN_IP` | **必填** | 部署机局域网 IP (证书 SAN + 受信权威)。**无默认, 缺失 compose 拒绝启动** |
+| `DSH_TRUSTED_AUTHORITY` | {LAN_IP}:3080 | relay 把外部 Host 重写成的受信权威。独立可配 |
+| `DSH_RELAY_BIND_LOOPBACK` | 0 | `1` 时 relay 只绑本机(配 loopback 权威用于本机专用) |
 
 改 HTTPS 端口(避开冲突): 编辑 `.env`
 ```bash
@@ -66,13 +70,13 @@ docker compose restart dsh
 
 dsh 有三个东西要挂，缺一不可（尤其工作区）：
 
-| 数据 | 宿主路径 | 容器内 | 说明 |
+| 数据 | 宿主路径(.env 填) | 容器内 | 说明 |
 |---|---|---|---|
-| 设置/数据根 | `/home/user/harness-home` | `/dsh-home` | `$DSH_HOME`: settings.yaml、profiles/cordis.patch.yml、.credentials.yaml、sessions、storages、integrations、tls |
-| **工作区** ⚠️ | `/home/user/deepseek-harness` | **同路径** `/home/user/deepseek-harness` | dsh-im(Telegram) 配置的 workspace。**必须挂同路径**，否则容器内该路径不存在 → Telegram 会话记录错乱 |
-| TLS 证书 | `harness-home/tls` | `/dsh-home/tls` | 见上节, entrypoint 自动管理 |
+| 设置/数据根 | `$DSH_DATA_DIR` | `/dsh-home` | `$DSH_HOME`: settings.yaml、profiles/cordis.patch.yml、.credentials.yaml、sessions、storages、integrations、tls |
+| **工作区** ⚠️ | `$DSH_WORKSPACE_DIR` | **同路径** | dsh-im(Telegram) 配置的 workspace。**必须同路径挂载**，否则容器内该路径不存在 → Telegram 会话记录错乱 |
+| TLS 证书 | `<$DSH_DATA_DIR>/tls` | `/dsh-home/tls` | 见上节, entrypoint 自动管理 |
 
-> ⚠️ **工作区挂载的教训**：`integrations/dsh-telegram/workspaces.json` 把 Telegram 机器人的 workspace 绑在 `/home/user/deepseek-harness`。容器若不挂这个路径，dsh-im 在容器内找不到真实工作区，会话会错乱写入别处。**任何容器都要把工作区以相同路径挂进来**。
+> ⚠️ **工作区挂载的教训**：`$DSH_HOME/integrations/dsh-telegram/workspaces.json` 把 Telegram 机器人的 workspace 绑在一个绝对路径。容器若不挂这个路径，dsh-im 在容器内找不到真实工作区，会话会错乱写入别处。**任何容器都要把工作区以相同路径挂进来**（`DSH_WORKSPACE_DIR` 必须 = 该实际路径）。已生效的 `workspaces.json` 路径可直接 `cat` 查看。
 
 配置 = bind-mount 整块 `harness-home` → 升级只换镜像, 数据永不丢。
 
@@ -86,10 +90,35 @@ docker compose up -d       # 重建容器, 数据卷原样复用
 
 ## 🛡️ 安全
 
-- 数据面 loopback-only settings 边界保留在容器内(远程仍 403, 需配置驱动改 Models)
-- 不暴露额外端口(host 网络); 远程走 WARP/Mesh 访问 HTTPS
-- 镜像内不烘焙任何密钥/配置; 全部运行时挂卷
-- ⚠️ dsh 是 agent(能读写工作区), Web UI 无登录认证 → 别裸暴露公网
+### ⚠️ 先说清楚：全链路零认证（务必读）
+**dsh 的 Web UI 和 relay 都没有登录认证。** 上游 fence 明确声明 "this fence is not an auth layer"。这意味着:
+- **任何能连到 8443 的主机** 都能读取全部会话/对话内容, 并通过非特权方法**驱动 agent 执行**(agent 能读写工作区!)
+- 防火墙、WARP/Mesh 访问隔离、IP 白名单是**唯一**的真实防线——不是摆设, 是必需的
+- 因此**禁止**把 8443 暴露到公网/不可信网络
+
+### 强制防护(本项目已内置)
+- **fail-closed 启动校验** (审查 S1): `DSH_LAN_IP` 必填(compose 校验 + entrypoint 双重保证), 缺省 loopback 时拒绝启动——绝不把特权面(bind-mount 的配置/凭据/TLS 私钥)暴露给全网
+- **非 root 运行** (审查 H1): 容器内 `USER node` (uid 1000), dsh 进程无 root 权限
+- **特权方法隔离**: dsh 的 `settings.*`/`credentials.*`/`host.pickDirectory`/`llm.discoverModels` 只认 loopback Host, 远程始终 403(改 Models 走配置驱动)
+- image 内不烘焙任何密钥/配置; 全运行时挂卷
+
+### 建议的防火墙(ufw 示例, 默认拒绝入向)
+```bash
+# 只允许本机 web 端口 + 你实际需要访问的来源
+sudo ufw default deny incoming
+# 本机直接用
+sudo ufw allow proto tcp from 127.0.0.1 to any port 3080,8443
+# 局域网/WARP 来源(按需开启, 替换成你的网段/来源)
+sudo ufw allow proto tcp from 192.168.1.0/24 to any port 8443
+```
+> 更严格的做法: 完全不开放 8443 到 LAN, 仅通过 WARP/Mesh(Cloudflare) 访问; 或用 `DSH_RELAY_BIND_LOOPBACK=1` 只在本机用。
+
+### 平台
+- 仅 **Linux** (`network_mode: host` + relay 依赖 Linux 网络语义)。macOS/Windows Docker 的 host 网络语义不同, 会静默失效。
+
+### 排查提示
+- `settings.*` 远程 403 是**预期行为**(设计如此), 不是 bug——远程改 provider 走配置文件
+- `DSH_TRUSTED_AUTHORITY` 若被你改成 entrypoint `--trusted-host` 列表外的值, 所有 LAN 流量会 403(fail-closed); 排查时先确认两者一致
 
 ## ⚠️ node 版本坑(已由镜像规避)
 

@@ -10,8 +10,42 @@ set -euo pipefail
 DSH_HOME="${DSH_HOME:-/dsh-home}"
 DSH_WEB_PORT="${DSH_WEB_PORT:-3080}"
 DSH_HTTPS_PORT="${DSH_HTTPS_PORT:-8443}"
-DSH_LAN_IP="${DSH_LAN_IP:-localhost}"
+# 必须显式提供 DSH_LAN_IP(relay 权威)。不提供则 fail-closed, 避免特权面暴露全网(见 review S1)
+DSH_LAN_IP="${DSH_LAN_IP:-}"
 DSH_TRUSTED_AUTHORITY="${DSH_TRUSTED_AUTHORITY:-${DSH_LAN_IP}:3080}"
+
+log()  { echo "[entrypoint] $*"; }   # 定义在最先, 供下方 S1 校验使用
+
+# ---------------------------------------------------------------------------
+# FAIL-CLOSED 启动校验 (review S1):
+#   relay 绑 0.0.0.0(全网) + host 网络时, DSH_TRUSTED_AUTHORITY 若解析为 loopback,
+#   dsh 的 loopback-only 特权方法(fence)会对全网放行 → 特权面暴露。
+#   因此: 未配置 DSH_LAN_IP, 或 TRUSTED_AUTHORITY 为 loopback/localhost 时直接退出。
+#   (注意: 证书 SAN 需要 DSH_LAN_IP 为真实 IP, loopback 也会生成非法 IP SAN)
+# ---------------------------------------------------------------------------
+is_loopback() { # 检测 host 部分是否 loopback
+  case "${1%%:*}" in
+    localhost|127.*|::1) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if [ -z "$DSH_LAN_IP" ]; then
+  echo "[entrypoint] ❌ 未设置 DSH_LAN_IP(部署机局域网 IP)。为保证不暴露特权面,拒绝启动。" >&2
+  echo "  请配置: cp .env.example .env 并在 .env 填 DSH_LAN_IP=你的实际IP" >&2
+  exit 1
+fi
+# relay 若绑 loopback(只本机), 则 loopback 权威安全; 否则(绑全网)必须非 loopback 权威
+RELAY_BIND_LOOPBACK="${DSH_RELAY_BIND_LOOPBACK:-0}"
+if [ "$RELAY_BIND_LOOPBACK" = "1" ]; then
+  log "relay 将绑 loopback, loopback 权威允许"
+else
+  if is_loopback "$DSH_TRUSTED_AUTHORITY"; then
+    echo "[entrypoint] ❌ DSH_TRUSTED_AUTHORITY($DSH_TRUSTED_AUTHORITY) 是 loopback, 但 relay 绑全网。此配置会让特权方法对全网放行(fail-open),拒绝启动。" >&2
+    echo "  请在 .env 设置非 loopback 的 DSH_LAN_IP, 或改用 DSH_RELAY_BIND_LOOPBACK=1" >&2
+    exit 1
+  fi
+fi
 
 # 默认 agent provider envs (llama.cpp/vLLM 端点不校验 key 值, 但 dsh 依此做凭据存在性检查)
 export OLLAMA_API_KEY="${OLLAMA_API_KEY:-ollama-local}"
@@ -23,8 +57,6 @@ TLS_DIR="$DSH_HOME/tls"
 CERT_PEM="$TLS_DIR/cert.pem"
 KEY_PEM="$TLS_DIR/key.pem"
 SERVER_PEM="$TLS_DIR/server.pem"   # relay 需要 cert+key 合并
-
-log()  { echo "[entrypoint] $*"; }
 
 # ---------------------------------------------------------------------------
 # 1) TLS 证书准备
@@ -55,19 +87,38 @@ else
   log "⚠ 无证书, 自动生成新自签证书 ..."
   generate_cert_linux
 fi
+# chown 需 root 权限(entrypoint 以 root 运行才有)。降权后的工作进程(node)才能读证书。
+: "${DSH_RUN_UID:=1000}" "${DSH_RUN_GID:=1000}"   # set -u 安全默认
 chmod 600 "$KEY_PEM" "$SERVER_PEM" 2>/dev/null || true
+chown "$DSH_RUN_UID:$DSH_RUN_GID" "$CERT_PEM" "$KEY_PEM" "$SERVER_PEM" 2>/dev/null || true
+# 降权(非root)工作进程需能读写 dsh 运行时数据目录。既有 root 属主目录(旧部署产物)需归给运行用户。
+#   只 chown dsh 实际写的数据子路径, 不盲目动整个 $DSH_HOME(保护宿主导航编辑的配置文件属主)。
+for sub in sessions storages integrations profiles; do
+  [ -e "$DSH_HOME/$sub" ] && chown -R "$DSH_RUN_UID:$DSH_RUN_GID" "$DSH_HOME/$sub" 2>/dev/null || true
+done
+# $DSH_HOME 根本身(若属 root 也归给运行用户, 保证可新建子目录)
+chown "$DSH_RUN_UID:$DSH_RUN_GID" "$DSH_HOME" 2>/dev/null || true
+chown "$DSH_RUN_UID:$DSH_RUN_GID" "$DSH_HOME/settings.yaml" "$DSH_HOME/.credentials.yaml" 2>/dev/null || true
+log "运行数据属主 → $DSH_RUN_UID:$DSH_RUN_GID (sessions/storages/integrations/profiles/tls)"
 
 # ---------------------------------------------------------------------------
 # 2) 启动 TLS relay + dsh web 双进程, 互相看护
 # ---------------------------------------------------------------------------
-log "启动 TLS relay  https://0.0.0.0:${DSH_HTTPS_PORT} -> http://127.0.0.1:${DSH_WEB_PORT} (trusted-as ${DSH_TRUSTED_AUTHORITY})"
-node /usr/local/bin/dsh-tls-relay.js \
-  0.0.0.0 "$DSH_HTTPS_PORT" "$SERVER_PEM" \
+# relay 默认绑全网(0.0.0.0)供 LAN/WARP 访问; DSH_RELAY_BIND_LOOPBACK=1 时只绑本机
+if [ "${DSH_RELAY_BIND_LOOPBACK:-0}" = "1" ]; then
+  RELAY_BIND="127.0.0.1"
+  log "relay 仅绑本机 loopback (DSH_RELAY_BIND_LOOPBACK=1)"
+else
+  RELAY_BIND="0.0.0.0"
+fi
+log "启动 TLS relay  https://${RELAY_BIND}:${DSH_HTTPS_PORT} -> http://127.0.0.1:${DSH_WEB_PORT} (trusted-as ${DSH_TRUSTED_AUTHORITY})"
+runuser -u node -- node /usr/local/bin/dsh-tls-relay.js \
+  "$RELAY_BIND" "$DSH_HTTPS_PORT" "$SERVER_PEM" \
   127.0.0.1 "$DSH_WEB_PORT" "$DSH_TRUSTED_AUTHORITY" &
 RELAY_PID=$!
 
 log "启动 dsh web  http://127.0.0.1:${DSH_WEB_PORT}  (provider 默认经 DSH_HOME settings)"
-DSH_HOME="$DSH_HOME" dsh web \
+runuser -u node -- env DSH_HOME="$DSH_HOME" dsh web \
   --no-open \
   --host 127.0.0.1 \
   --port "$DSH_WEB_PORT" \
@@ -78,22 +129,52 @@ DSH_PID=$!
 
 # 信号处理: 任一挂掉重启 (看护循环)
 trap 'log "收到信号, 退出"; kill $RELAY_PID $DSH_PID 2>/dev/null; exit 0' TERM INT
+
+# 看护循环: 带连续失败计数与退避 (review M3)。进程秒崩时(如配置错误)快速失败并放大间隔,
+# 避免无限刷日志; 连续 N 次失败后放弃工作集, 保容器 alive 由外部分层(舵手/compose)处理。
+declare -a FAIL_COUNT=()
+DECAY_LIMIT=20        # 连续失败达此数 → 判定"持久性崩溃", 停止自动重启并打印死锁提示
+BACKOFF_BASE=1        # 初始秒
+SUPERVISION_MAX=0     # 内部看护上限(无需, 交给 restart policy)
+
+start_dsh() {
+  runuser -u node -- env DSH_HOME="$DSH_HOME" dsh web \
+    --no-open --host 127.0.0.1 --port "$DSH_WEB_PORT" \
+    --trusted-host "${DSH_LAN_IP}:${DSH_HTTPS_PORT}" \
+    --trusted-host "${DSH_LAN_IP}:${DSH_WEB_PORT}" \
+    --trusted-host "127.0.0.1:${DSH_WEB_PORT}" &
+  echo $!
+}
+start_relay() {
+  runuser -u node -- node /usr/local/bin/dsh-tls-relay.js \
+    "$RELAY_BIND" "$DSH_HTTPS_PORT" "$SERVER_PEM" \
+    127.0.0.1 "$DSH_WEB_PORT" "$DSH_TRUSTED_AUTHORITY" &
+  echo $!
+}
+
 while true; do
   if ! kill -0 $DSH_PID 2>/dev/null; then
     log "⚠ dsh web 挂了, 重启 ..."
-    DSH_HOME="$DSH_HOME" dsh web \
-      --no-open --host 127.0.0.1 --port "$DSH_WEB_PORT" \
-      --trusted-host "${DSH_LAN_IP}:${DSH_HTTPS_PORT}" \
-      --trusted-host "${DSH_LAN_IP}:${DSH_WEB_PORT}" \
-      --trusted-host "127.0.0.1:${DSH_WEB_PORT}" &
-    DSH_PID=$!
+    DSH_PID=$(start_dsh)
+    FAIL_COUNT[0]=$(( ${FAIL_COUNT[0]:-0} + 1 ))
+  else
+    FAIL_COUNT[0]=0   # 健康时清零
   fi
   if ! kill -0 $RELAY_PID 2>/dev/null; then
     log "⚠ TLS relay 挂了, 重启 ..."
-    node /usr/local/bin/dsh-tls-relay.js \
-      0.0.0.0 "$DSH_HTTPS_PORT" "$SERVER_PEM" \
-      127.0.0.1 "$DSH_WEB_PORT" "$DSH_TRUSTED_AUTHORITY" &
-    RELAY_PID=$!
+    RELAY_PID=$(start_relay)
+    FAIL_COUNT[1]=$(( ${FAIL_COUNT[1]:-0} + 1 ))
+  else
+    FAIL_COUNT[1]=0
+  fi
+  # 任一侧持续秒崩 → 判定持久性故障, 停止内部重启(交 restart policy / 人工)
+  if [ "${FAIL_COUNT[0]:-0}" -ge "$DECAY_LIMIT" ] || [ "${FAIL_COUNT[1]:-0}" -ge "$DECAY_LIMIT" ]; then
+    log "❌ 检测到持久性崩溃(连续 ${DECAY_LIMIT}+ 次)。停止自动重启工作集。"
+    log "   保留容器 alive; 请检查日志找根因, 或由 compose restart policy 重建。" >&2
+    # 等闲置, 不无限刷
+    sleep 60
+    FAIL_COUNT=(0 0)   # 重置, 给外部重启机会
+    continue
   fi
   sleep 5
 done

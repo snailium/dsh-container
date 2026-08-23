@@ -5,3 +5,6 @@ node_modules
 *.log
 **/.DS_Store
 .dockerignore
+
+# 生产镜像不含单元测试(测试在 CI/宿主 checkout 上跑, 不进镜像)
+docker/test

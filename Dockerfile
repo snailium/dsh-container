@@ -10,14 +10,14 @@
 
 FROM node:22
 ARG DSH_VERSION=0.1.1-rc.2
-# DSH_LAN_IP 默认 localhost 占位; 真实部署 IP 经 docker-compose 的 .env 注入(见 .env.example)
+# DSH_LAN_IP 必须经 docker-compose 的 .env 显式提供(见 review S1: 不填则 fail-closed 拒绝启动)
 ENV NODE_ENV=production \
     DSH_VERSION=${DSH_VERSION} \
     DSH_HOME=/dsh-home \
     DSH_WEB_PORT=3080 \
     DSH_HTTPS_PORT=8443 \
-    DSH_LAN_IP=localhost \
-    DSH_TRUSTED_AUTHORITY=localhost:3080
+    DSH_LAN_IP= \
+    DSH_TRUSTED_AUTHORITY=
 
 # 健康检查 + TLS 工具
 RUN apt-get update \
@@ -32,14 +32,23 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/dsh-tls-relay.js /usr/local/bin/dsh-tls-relay.js
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+# 安全: dsh/relay 工作进程以非 root(node/uid1000) 运行。
+#   注意: 不在 Dockerfile 设 `USER node`——entrypoint 需要 root 权限生成/chown 证书
+#   (已有 root 属主证书时 node 无法接管)。由 entrypoint 用 `runuser -u node` 降权
+#   启动两个工作进程, 达成与 `USER node` 相同的"进程非 root"(review H1)而不破坏证书管理。
+#   runuser 为非交互降权(无需 gosu)。node uid=1000 与宿主 gwang 同 uid → 能读写 bind-mount。
+
 # 数据/证书卷(必须挂载, entrypoint 会建 tls)
+# ⚠️ 裸 `docker run` 不挂卷时, 此匿名卷会"悄悄吞掉"数据(数据存进匿名卷而非宿主路径)。
+#    必须用 docker compose(docker-compose.yml 显式 bind-mount) 或 docker run -v 挂载。
 VOLUME ["/dsh-home"]
 WORKDIR /dsh-home
 
 EXPOSE 3080 8443
 
-# 健康检查: curl 本机 web = 起来了
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD curl -fsS http://127.0.0.1:${DSH_WEB_PORT}/ -o /dev/null || exit 1
+# 健康检查: 同时验证 web(3080) 和 TLS relay(8443)。relay 挂了直接 unhealthy (review M4)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:${DSH_WEB_PORT}/ -o /dev/null \
+    && curl -kfsS https://127.0.0.1:${DSH_HTTPS_PORT}/ -o /dev/null || exit 1
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
