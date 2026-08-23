@@ -30,12 +30,12 @@ services:
       DSH_WEB_PORT: ${DSH_WEB_PORT:-3080}
     # 数据卷: 路径在 .env 里填(DSH_DATA_DIR / DSH_WORKSPACE_DIR), 仓库不含内部路径
     #   DSH_DATA_DIR     → $DSH_HOME(settings/sessions/profiles/TLS)
-    #   DSH_WORKSPACE_DIR→ Telegram 机器人绑定的工作区, 必须同路径挂载
+    #   DSH_WORKSPACE_DIR→ 工作区宿主目录, 挂到容器内 /workspace(dsh 默认工作区 = process.cwd()=/workspace)
     # 两者均强制必填(:?)——缺失会静默挂载 root 属主的默认路径, node 用户写不进去(见 review S4)
     volumes:
       - ${DSH_DATA_DIR:?请在 .env 设置 DSH_DATA_DIR=harness-home 宿主路径}:/dsh-home
-      # 工作区同路径挂载(dsh-im workspace 绑定), 缺失会导致会话记录错乱分叉
-      - ${DSH_WORKSPACE_DIR:?请在 .env 设置 DSH_WORKSPACE_DIR=dsh-im 工作区宿主路径}:${DSH_WORKSPACE_DIR:?请在 .env 设置 DSH_WORKSPACE_DIR=dsh-im 工作区宿主路径}
+      # 工作区挂到容器内固定 /workspace(不再同路径 bind; dsh-im workspace 默认值=容器cwd)
+      - ${DSH_WORKSPACE_DIR:?请在 .env 设置 DSH_WORKSPACE_DIR=dsh-im 工作区宿主路径}:/workspace
     logging:
       driver: json-file
       options:

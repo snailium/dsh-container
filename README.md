@@ -73,10 +73,12 @@ dsh 有三个东西要挂，缺一不可（尤其工作区）：
 | 数据 | 宿主路径(.env 填) | 容器内 | 说明 |
 |---|---|---|---|
 | 设置/数据根 | `$DSH_DATA_DIR` | `/dsh-home` | `$DSH_HOME`: settings.yaml、profiles/cordis.patch.yml、.credentials.yaml、sessions、storages、integrations、tls |
-| **工作区** ⚠️ | `$DSH_WORKSPACE_DIR` | **同路径** | dsh-im(Telegram) 配置的 workspace。**必须同路径挂载**，否则容器内该路径不存在 → Telegram 会话记录错乱 |
+| **工作区** ⚠️ | `$DSH_WORKSPACE_DIR` | `/workspace` | dsh-im(Telegram) 默认工作区。容器内固定挂 `/workspace`（Dockerfile WORKDIR=/workspace → `process.cwd()`=/workspace → dsh-im 默认工作区即 /workspace），不再依赖同路径 bind |
 | TLS 证书 | `<$DSH_DATA_DIR>/tls` | `/dsh-home/tls` | 见上节, entrypoint 自动管理 |
 
-> ⚠️ **工作区挂载的教训**：`$DSH_HOME/integrations/dsh-telegram/workspaces.json` 把 Telegram 机器人的 workspace 绑在一个绝对路径。容器若不挂这个路径，dsh-im 在容器内找不到真实工作区，会话会错乱写入别处。**任何容器都要把工作区以相同路径挂进来**（`DSH_WORKSPACE_DIR` 必须 = 该实际路径）。已生效的 `workspaces.json` 路径可直接 `cat` 查看。
+> ⚠️ **工作区挂载**：dsh-im 的 `BotWorkspaceStore` 默认工作区 = `process.cwd()`，而容器 WORKDIR 是 `/workspace`，所以首次启动的默认工作区自动是容器内 `/workspace`。用 compose 把 `$DSH_WORKSPACE_DIR` 挂到 `/workspace` 即可。
+>
+> **从旧版(同路径 bind)迁移**：旧部署的 `$DSH_HOME/integrations/dsh-telegram/workspaces.json` 里 Telegram 机器人的 workspace 是旧宿主绝对路径。切到 `/workspace` 挂载后，需二选一：① 删除该文件里的绑定，让默认值(process.cwd()=/workspace)接管；② 把旧工作区数据迁到新 `$DSH_WORKSPACE_DIR` 目录，并同步更新该 JSON 为 `/workspace`。不做迁移的话，旧绑定会指向容器内不存在的路径 → 会话错乱。
 
 配置 = bind-mount 整块 `harness-home` → 升级只换镜像, 数据永不丢。
 

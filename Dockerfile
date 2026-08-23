@@ -42,7 +42,13 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # ⚠️ 裸 `docker run` 不挂卷时, 此匿名卷会"悄悄吞掉"数据(数据存进匿名卷而非宿主路径)。
 #    必须用 docker compose(docker-compose.yml 显式 bind-mount) 或 docker run -v 挂载。
 VOLUME ["/dsh-home"]
-WORKDIR /dsh-home
+
+# 工作区卷(Telegram 机器人默认工作区, 见下)。dsh-im 的 bot-workspace-store 默认工作区 =
+# process.cwd(), 因此把 WORKDIR 设为 /workspace 即让首次启动的默认工作区统一到 /workspace,
+# 不再依赖宿主同路径 bind。旧绑定在 $DSH_HOME/integrations/dsh-telegram/workspaces.json,
+# 迁移到新工作区需同步更新该文件或删除其绑定让默认值接管。
+WORKDIR /workspace
+VOLUME ["/workspace"]
 
 EXPOSE 3080 8443
 
