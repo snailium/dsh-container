@@ -65,6 +65,7 @@ jobs:
           file: ./Dockerfile
           build-args: DSH_VERSION=${{ steps.npm.outputs.latest }}
           push: true
+          # build-push-action 的 tags 不做 shell 变量展开, 需用 env.IMAGE 显式引用
           tags: |
-            ${IMAGE}:${{ steps.npm.outputs.latest }}
-            ${IMAGE}:latest
+            ${{ env.IMAGE }}:${{ steps.npm.outputs.latest }}
+            ${{ env.IMAGE }}:latest
