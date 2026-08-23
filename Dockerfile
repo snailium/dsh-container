@@ -43,10 +43,13 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 #    必须用 docker compose(docker-compose.yml 显式 bind-mount) 或 docker run -v 挂载。
 VOLUME ["/dsh-home"]
 
-# 工作区卷(Telegram 机器人默认工作区, 见下)。dsh-im 的 bot-workspace-store 默认工作区 =
-# process.cwd(), 因此把 WORKDIR 设为 /workspace 即让首次启动的默认工作区统一到 /workspace,
-# 不再依赖宿主同路径 bind。旧绑定在 $DSH_HOME/integrations/dsh-telegram/workspaces.json,
-# 迁移到新工作区需同步更新该文件或删除其绑定让默认值接管。
+# 工作区卷: 宿主 $DSH_WORKSPACE_DIR 挂载到容器内固定 /workspace。
+# dsh 核心的工作区由 UI 显式 "新建工作区"(workspace.create<path>) 指定目录——没有一个
+# "默认工作区=process.cwd()" 机制。统一挂 /workspace 的意义:
+#   ① WORKDIR=/workspace → dsh web 启动后进程 cwd 确定且可预期(默认运行目录);
+#   ② 宿主工作区目录与容器内路径解耦, 换宿主路径不用改容器。
+# 在 UI 新建工作区时选容器内 /workspace(或其子目录) 即可。旧版"(dsh-im 默认工作区=
+# process.cwd())"的提法不成立——dsh-im 是独立插件, 项目不带, 见 README "工作区挂载"节。
 WORKDIR /workspace
 VOLUME ["/workspace"]
 

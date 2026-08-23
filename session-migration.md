@@ -111,7 +111,7 @@ mkdir -p "$BK"
 cp -a $DSH_HOME/sessions "$BK/sessions"          # 会话全量(含zstd)
 cp -a $DSH_HOME/storages/workspace.json "$BK/"   # workspace registry
 cp -a $DSH_HOME/storages/session_projcache.json "$BK/"
-cp -a $DSH_HOME/integrations/*/workspaces.json "$BK/" 2>/dev/null
+cp -a $DSH_HOME/integrations/*/workspaces.json "$BK/" 2>/dev/null   # 仅 when 装了 dsh-im(Telegram) 插件才存在, 可选
 cp -a .env "$BK/.env"                             # compose 配置
 ```
 
@@ -142,7 +142,7 @@ node fix_header_only.js <session_dir> <old_cwd> <new_cwd>
 ### 4.4 同步注册表
 - `$DSH_HOME/storages/workspace.json`：把旧 path 的 workspace 记录 `path` 改新路径
 - `$DSH_HOME/storages/session_projcache.json`：把迁移会话的 `identity.cwd` 改新路径
-- `$DSH_HOME/integrations/<bot>/workspaces.json`：把 bot 的工作区绑定改新路径（用**容器内**路径，如 `/workspace/deepseek-harness`）
+- `$DSH_HOME/integrations/<bot>/workspaces.json`：**仅 when 装了 dsh-im(Telegram) 插件**——把 bot 的工作区绑定改新路径（用**容器内**路径，如 `/workspace/deepseek-harness`）。没有该插件则忽略此条。
 
 ### 4.5 更新 .env 与 compose 挂载
 ```bash
