@@ -64,16 +64,17 @@ docker compose restart dsh
 
 ## 💾 数据卷映射
 
-| 数据 | 宿主路径(挂载) | 容器内 | 说明 |
-|---|---|---|---|
-| 设置/配置 | `harness-home` | `/dsh-home` | settings.yaml、profiles/cordis.patch.yml、.credentials.yaml |
-| dsh-im | `.../integrations` | `/dsh-home/integrations` | Telegram bot 状态/token |
-| 会话 | `.../sessions` | `/dsh-home/sessions` | 对话历史 |
-| 运行时状态 | `.../storages` | `/dsh-home/storages` | |
-| **证书** | `.../tls` | `/dsh-home/tls` | 见上节, 自动管理 |
-| 日志 | 宿主 stdout | — | `docker logs dsh` |
+dsh 有三个东西要挂，缺一不可（尤其工作区）：
 
-配置 = bind-mount 整块 `harness-home` → **升级只换镜像, 数据永不丢**。
+| 数据 | 宿主路径 | 容器内 | 说明 |
+|---|---|---|---|
+| 设置/数据根 | `/home/user/harness-home` | `/dsh-home` | `$DSH_HOME`: settings.yaml、profiles/cordis.patch.yml、.credentials.yaml、sessions、storages、integrations、tls |
+| **工作区** ⚠️ | `/home/user/deepseek-harness` | **同路径** `/home/user/deepseek-harness` | dsh-im(Telegram) 配置的 workspace。**必须挂同路径**，否则容器内该路径不存在 → Telegram 会话记录错乱 |
+| TLS 证书 | `harness-home/tls` | `/dsh-home/tls` | 见上节, entrypoint 自动管理 |
+
+> ⚠️ **工作区挂载的教训**：`integrations/dsh-telegram/workspaces.json` 把 Telegram 机器人的 workspace 绑在 `/home/user/deepseek-harness`。容器若不挂这个路径，dsh-im 在容器内找不到真实工作区，会话会错乱写入别处。**任何容器都要把工作区以相同路径挂进来**。
+
+配置 = bind-mount 整块 `harness-home` → 升级只换镜像, 数据永不丢。
 
 ## 🔄 升级
 
