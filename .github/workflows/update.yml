@@ -1,6 +1,6 @@
 name: Auto-update dsh image
 
-# 定时轮询上游 npm dist-tags.latest, 有新版则重建镜像并推 ghcr.io/snailium/dsh
+# 定时轮询上游 npm dist-tags.latest, 有新版则重建镜像并推 ghcr 的 repo-scoped 包
 on:
   schedule:
     - cron: "0 */6 * * *"   # 每6小时
@@ -12,7 +12,9 @@ permissions:
   contents: read
 
 env:
-  IMAGE: ghcr.io/snailium/dsh
+  # repo-scoped 包: ghcr.io/snailium/<repo>/<img> — 用 GITHUB_TOKEN 即可推(关联当前 repo),
+  #   user-scoped(ghcr.io/snailium/...) 需额外 PAT, GITHUB_TOKEN 会 denied
+  IMAGE: ghcr.io/snailium/dsh-container/dsh
 
 jobs:
   check-and-build:

@@ -3,7 +3,7 @@
 #       docker compose pull && docker compose up -d   (升级)
 services:
   dsh:
-    image: ghcr.io/snailium/dsh:latest
+    image: ghcr.io/snailium/dsh-container/dsh:latest
     build:
       context: .
       args:
@@ -26,17 +26,13 @@ services:
       DSH_TRUSTED_AUTHORITY: ${DSH_LAN_IP:-localhost}:3080
       # --- dsh web 监听 ---
       DSH_WEB_PORT: ${DSH_WEB_PORT:-3080}
-    # 数据卷: bind-mount 现有 harness-home (settings/配置/sessions/集成/TLS 全复用)
+    # 数据卷: 路径在 .env 里填(DSH_DATA_DIR / DSH_WORKSPACE_DIR), 仓库不含内部路径
+    #   DSH_DATA_DIR     → $DSH_HOME(settings/sessions/profiles/TLS)
+    #   DSH_WORKSPACE_DIR→ Telegram 机器人绑定的工作区, 必须同路径挂载
     volumes:
-      - /home/user/harness-home:/dsh-home
-      # ✅ 工作区也必须挂进来: dsh-im(Telegram) 配置的 workspace 就是 /home/user/deepseek-harness
-      #   (integrations/dsh-telegram/workspaces.json), 容器内不挂 → 工作区指不到真实路径,
-      #   会话记录错乱分叉到 sessions/--dsh-home-- 等哈希目录。挂同路径保持记录归位。
-      - /home/user/deepseek-harness:/home/user/deepseek-harness
-    # TLS 证书也在 /dsh-home/tls (数据卷), 会由 entrypoint 自动生成/导入
-    # 若需独立证书目录:
-    #   - /home/user/harness-home:/dsh-home
-    #   - /path/to/my-certs:/dsh-home/tls
+      - ${DSH_DATA_DIR:-/data/harness-home}:/dsh-home
+      # 工作区同路径挂载(dsh-im workspace 绑定), 缺失会导致会话记录错乱分叉
+      - ${DSH_WORKSPACE_DIR:-/data/deepseek-harness}:${DSH_WORKSPACE_DIR:-/data/deepseek-harness}
     logging:
       driver: json-file
       options:

@@ -19,7 +19,7 @@ docker compose up -d     # 启动
   docker build --build-arg DSH_VERSION=0.1.1-rc.2 .
   ```
 - 镜像 tag 直接用 npm 版本号 (如 `0.1.1-rc.2`, `latest`)
-- 发布到 `ghcr.io/snailium/dsh` (私有)
+- 发布到 repo-scoped `ghcr.io/snailium/dsh-container/dsh` (跟随仓库: 公开仓库→镜像公开; 也可 Web UI 单独改成 private)
 
 ### 自动更新 (GitHub Actions)
 `.github/workflows/update.yml` 定时轮询 npm `dist-tags.latest`:
