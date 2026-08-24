@@ -143,7 +143,8 @@ for sd in ${DSH_HOME}/sessions/./--<旧key>--/session-*; do
   mkdir -p ${DSH_HOME}/sessions/--<新key>--
   mv "$sd" ${DSH_HOME}/sessions/--<新key>--/                 # 移入新目录
 done
-rm -rf ${DSH_HOME}/sessions/--<旧key>--                      # 旧目录清空后删除
+# 只删空目录: 某次 mv 失败(磁盘满/权限)时残留会话目录非空 → find 不删、保留数据(review E2)
+find ${DSH_HOME}/sessions/./--<旧key>-- -empty -delete
 ```
 
 ### 4.4 同步注册表

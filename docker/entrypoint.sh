@@ -119,7 +119,8 @@ ensure_owned_by_process "$DSH_HOME/settings.yaml"
 ensure_owned_by_process "$DSH_HOME/.credentials.yaml"
 # 工作区卷(容器内 /workspace): 全新部署时 docker 自动创建 root:root 0755,
 # 降权的 node(uid 1000) 对 /workspace 建工作区/写数据会失败, 故一并接管(仅当 root 属主)
-ensure_owned_by_process "${DSH_WORKSPACE_ROOT:-/workspace}"
+# 注: 写死 /workspace(compose 挂载点即硬编码 /workspace, 无 DSH_WORKSPACE_ROOT 旋钮; review E1)
+ensure_owned_by_process /workspace
 # $DSH_HOME 根本身: 也仅当属主为 root 时接管(与子路径一致, review T2)
 owner=$(stat -c %u "$DSH_HOME" 2>/dev/null || echo "")
 if [ "$owner" = "0" ]; then
