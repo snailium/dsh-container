@@ -3,7 +3,7 @@
 > 适用的 dsh 版本：`@deepseek-ai/dsh` 全局包（本仓库 0.1.1-rc.x）
 > 写于 2026-08-23，基于一次真实的容器化迁移实践。
 
-本指南解决一个核心问题：**更换 dsh 的工作区路径后，历史会话如何迁移（而不被归到 "Unngrouped"/未分组）**。
+本指南解决一个核心问题：**更换 dsh 的工作区路径后，历史会话如何迁移（而不被归到 "Ungrouped"/未分组）**。
 
 ---
 
@@ -35,7 +35,7 @@ dsh 启动时扫描所有会话 header：
 1. 有效 cwd（目录存在）→ `sessionPath = realpath(cwd)`
 2. 按 cwd 归组 → 每个 cwd 生成一个 **workspace 实体**，`workspace.path = 该组 cwd`
 3. `workspace.sessionIds` = 筛选 `sessionPath(id) === workspace.path` 的会话
-4. **无 cwd 或 cwd 目录缺失** → 会话变成 "stray" → 在 UI 归入 **Unngrouped / 未分组**
+4. **无 cwd 或 cwd 目录缺失** → 会话变成 "stray" → 在 UI 归入 **Ungrouped / 未分组**
 
 ### 1.4 核心结论
 **「换工作区路径而导致旧会话进 ungrouped」是必然的**，除非把旧会话 header 里的 `cwd` 改成新路径，并同时把物理目录名改对。
@@ -83,10 +83,11 @@ dsh 启动时扫描所有会话 header：
 ### 3.2 项目目录名编码规则
 dsh 把 cwd 绝对路径编码为目录名（`projectKey`）：
 
-- `/` `\` `:` → `-`
+- `/` `\` `:` → `-`（**连续分隔符折叠为单个 `-`**）
 - 字母数字 `._-` 保留
-- 其它字符 → `~XXXX`（UTF-16 十六进制）
-- 结果包在 `--` 中
+- **其它字符（含字面 `~`）** → `~XXXX`（UTF-16 十六进制大写）——保留集显式排除 `~`
+- **结果截断到 251 字符**
+- 包在 `--` 中
 
 例子：
 ```
@@ -131,12 +132,18 @@ mv /home/user/deepseek-harness /home/user/deepseek-workspace/deepseek-harness
 
 1. 读原文件，定位第一帧（header 帧）的压缩长度
 2. 解压 header 帧 → 改 `cwd` → 重新压缩（带 checksum）
-3. body 帧字节级原样拼接
-4. 目标目录 = `projectKey(new_cwd)`，写入为新会话目录
+3. body 帧字节级原样拼接，**原地**写回该会话目录（脚本只改 header，不搬目录）
+4. 随后把会话目录 `--<旧key>--/<session-id>/` 移入 `--<新key>--/`（目录改名由你来做，必须与 header 的新 cwd 一致）
 
 ```bash
-# for each session dir:
-node fix_header_only.js <session_dir> <old_cwd> <new_cwd>
+# for each session dir: 先原地改 header, 再移到新 projectKey 目录
+# ⚠️ `--` 前缀目录名会被 shell 当 option, 用 `./` 前缀 + glob
+for sd in ${DSH_HOME}/sessions/./--<旧key>--/session-*; do
+  node fix_header_only.js "$sd" <old_cwd> <new_cwd>          # 原地改 cwd
+  mkdir -p ${DSH_HOME}/sessions/--<新key>--
+  mv "$sd" ${DSH_HOME}/sessions/--<新key>--/                 # 移入新目录
+done
+rm -rf ${DSH_HOME}/sessions/--<旧key>--                      # 旧目录清空后删除
 ```
 
 ### 4.4 同步注册表
@@ -192,7 +199,11 @@ docker compose up -d
 
 ```js
 #!/usr/bin/env node
-// 只重建 header 帧(改cwd), body 帧原样保留。用法: node fix_header_only.js <dir> <old_cwd> <new_cwd>
+// 只重建 header 帧(改cwd), body 帧原样保留。
+// 用法: node fix_header_only.js <dir> <old_cwd> <new_cwd>
+// ⚠️ 脚本原地改 dir 里的 session.jsonl.zstd 的 header; 目录改名(移入 --<新key>-- 目录)
+// 由调用方完成(见 §4.3)。frameLen() 靠扫下一帧 magic(0xFD2FB528) 定帧长是启发式——误判时
+// 解压/header 校验会在写入前抛错并安全中止(不会留下半改文件)。
 const fs = require("node:fs");
 const path = require("node:path");
 const zlib = require("node:zlib");
@@ -256,6 +267,6 @@ console.log(`\n${fail===0?"全部通过(dsh历史可加载)":fail+" 个失败"}`
 
 - header.cwd 在会话创建时固化（`toHeaderLine`）。
 - `assertStoredIdentity` 强校验 cwd ↔ 存储路径一致（`dsh-session-persistence-jsonl`）。
-- `dsh-workspace` 的 `bootstrap()` 按 cwd 归组生成 workspace；`workspace.sessionIds` 筛选 `sessionPath === path`。无 cwd 会话成 stray → Unngrouped。
+- `dsh-workspace` 的 `bootstrap()` 按 cwd 归组生成 workspace；`workspace.sessionIds` 筛选 `sessionPath === path`。无 cwd 会话成 stray → Ungrouped。
 
 如需在「迁移会话到新工作区的同时，旧工作区数据也搬移」，把 §4.2 的目录 mv 和 §4.3 的会话迁移配套执行即可。

@@ -41,6 +41,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # 数据/证书卷(必须挂载, entrypoint 会建 tls)
 # ⚠️ 裸 `docker run` 不挂卷时, 此匿名卷会"悄悄吞掉"数据(数据存进匿名卷而非宿主路径)。
 #    必须用 docker compose(docker-compose.yml 显式 bind-mount) 或 docker run -v 挂载。
+#    /workspace 卷同理: 不挂载时工作区数据也进匿名卷, 不会落在宿主期望路径。
 VOLUME ["/dsh-home"]
 
 # 工作区卷: 宿主 $DSH_WORKSPACE_DIR 挂载到容器内固定 /workspace。
