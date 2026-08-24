@@ -121,7 +121,9 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          build-args: DSH_VERSION=${DSH_VERSION:-0.1.1-rc.2}
+          # 不传 build-args → 用 Dockerfile 默认 DSH_VERSION(0.1.1-rc.2)。
+          # 不能用 ${DSH_VERSION:-...} shell 语法: GH Actions 的 with 不做 shell 展开,
+          # 会原样把字面量传成非法 npm tag(见 EINVALIDTAGNAME)。
           load: true
           tags: |
             smoke:latest
