@@ -111,6 +111,17 @@ jobs:
       - name: 检出源码
         uses: actions/checkout@v4
 
+      - name: 查上游 npm latest 版本 (与 check-and-build 一致)
+        id: npm
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const res = await fetch('https://registry.npmjs.org/@deepseek-ai/dsh/latest');
+            const pkg = await res.json();
+            const latest = pkg.version;
+            core.setOutput('latest', latest);
+            console.log('upstream latest:', latest);
+
       - name: entrypoint / smoke 语法检查 (bash -n)
         run: |
           bash -n docker/entrypoint.sh
@@ -121,9 +132,10 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          # 不传 build-args → 用 Dockerfile 默认 DSH_VERSION(0.1.1-rc.2)。
-          # 不能用 ${DSH_VERSION:-...} shell 语法: GH Actions 的 with 不做 shell 展开,
-          # 会原样把字面量传成非法 npm tag(见 EINVALIDTAGNAME)。
+          # 对着"将上线的 npm latest 版本"验证仓库改动, 而非 Dockerfile 默认版本(review G1)。
+          # 用 ${{ steps.npm.outputs.latest }} 表达式, 勿用 ${DSH_VERSION:-...} shell 语法:
+          # GH Actions 的 with 不做 shell 展开, 会原样传成非法 npm tag(见 EINVALIDTAGNAME)。
+          build-args: DSH_VERSION=${{ steps.npm.outputs.latest }}
           load: true
           tags: |
             smoke:latest

@@ -143,8 +143,11 @@ for sd in ${DSH_HOME}/sessions/./--<旧key>--/session-*; do
   mkdir -p ${DSH_HOME}/sessions/--<新key>--
   mv "$sd" ${DSH_HOME}/sessions/--<新key>--/                 # 移入新目录
 done
-# 只删空目录: 某次 mv 失败(磁盘满/权限)时残留会话目录非空 → find 不删、保留数据(review E2)
-find ${DSH_HOME}/sessions/./--<旧key>-- -empty -delete
+# 只删空目录: 某次 mv 失败(磁盘满/权限)时残留会话目录非空 → 删不掉就大声报错,
+# 让"header 已改但没搬走"的部分失败可见, 数据零丢失(见 review E2/G2)
+rmdir "${DSH_HOME}"/sessions/./--<旧key>-- 2>/dev/null \
+  && echo "✔ 旧会话目录已清空" \
+  || echo "⚠️ 旧目录 --<旧key>-- 非空: 有会话 header 已改但未 mv 成功, 请检查后手动处理(数据未丢失)"
 ```
 
 ### 4.4 同步注册表
