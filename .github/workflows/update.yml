@@ -11,6 +11,8 @@ on:
         required: false
         type: boolean
         default: false
+  push:                     # push 到 master 时跑测试(不推镜像, 见 push-test job)
+    branches: [master]
 
 # GITHUB_TOKEN 对当前仓库的 repo-scoped 容器包有 packages:write(推镜像)
 permissions:
@@ -24,6 +26,8 @@ env:
 
 jobs:
   check-and-build:
+    # 仅 schedule / workflow_dispatch 触发(不会因 push 跑)；push 走 push-test job
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - name: 查上游 npm latest 版本
@@ -95,3 +99,35 @@ jobs:
           docker push "${IMAGE}:${V}"
           docker push "${IMAGE}:latest"
           echo "pushed ${IMAGE}:${V} + :latest"
+
+  # --- push 到 master 时自动跑测试: 校验本轮改动(entrypoint/relay/Dockerfile)不破坏构建与运行 ---
+  # 只 build+测试, 不推镜像(镜像更新仍由 check-and-build 的 schedule/manual 负责)
+  push-test:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+
+      - name: entrypoint / smoke 语法检查 (bash -n)
+        run: |
+          bash -n docker/entrypoint.sh
+          bash -n docker/test/smoke.sh
+
+      - name: 构建镜像 (仅 build+load, 不 push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          build-args: DSH_VERSION=${DSH_VERSION:-0.1.1-rc.2}
+          load: true
+          tags: |
+            smoke:latest
+
+      - name: 仓库内单元测试 (relay 纯函数)
+        run: node docker/test/dsh-tls-relay.test.js
+
+      - name: 冒烟测试 (起容器, 验证书/web/relay/非root/自愈)
+        run: bash docker/test/smoke.sh smoke:latest
