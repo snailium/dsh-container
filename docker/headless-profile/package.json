@@ -1,0 +1,19 @@
+{
+    "name": "dsh-profile-headless",
+    "private": true,
+    "dependencies": {
+        "@anweat/dsh-browser": "file:/plugs/anweat-dsh-browser-0.1.10.tgz",
+        "dsh-web-search-pro": "file:/plugs/dsh-web-search-pro-0.1.11.tgz"
+    },
+    "dsh": {
+        "profile": {
+            "bundles": [
+                "@deepseek-ai/dsh-base",
+                "@deepseek-ai/dsh-headless",
+                "@anweat/dsh-browser",
+                "dsh-web-search-pro"
+            ],
+            "patchReload": "startup"
+        }
+    }
+}

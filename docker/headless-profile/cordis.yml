@@ -1,0 +1,4 @@
+# dsh profile root — composed from package.json bundles + cordis.patch.yml.
+# headless 测试 profile 模板: 仅官方 base+headless + web 搜索插件。
+# 默认模型/provider 由使用方在 DSH_HOME/settings.yaml 或 --patch 指定。
+[]

@@ -10,6 +10,15 @@ set -euo pipefail
 DSH_HOME="${DSH_HOME:-/dsh-home}"
 DSH_WEB_PORT="${DSH_WEB_PORT:-3080}"
 DSH_HTTPS_PORT="${DSH_HTTPS_PORT:-8443}"
+# 运行模式: web(默认, 双进程 web+relay) | headless(单任务, 免 TLS/relay)
+# headless 模式用于自动化测试(如 B70 更新后端后的 agent 测试): entrypoint 会确保
+# 测试 profile + 插件就绪, 然后 exec 透传 dsh --profile headless 跑一个任务后退出。
+#   headless CLI **不经过 web 访问层 → 完全不需要 access token** (见 README 自动化测试节)。
+DSH_MODE="${DSH_MODE:-web}"
+# 自动化测试要自带的第三方插件打成的 tgz, 位于镜像 /plugs/ (Dockerfile 打包)
+DSH_PLUGS_DIR="${DSH_PLUGS_DIR:-/plugs}"
+# headless 模式跑的 profile 名(首次启动若该 profile 缺插件, 会自动 seed + pnpm 安装)
+DSH_TEST_PROFILE="${DSH_TEST_PROFILE:-}"
 # 必须显式提供 DSH_LAN_IP(relay 权威)。不提供则 fail-closed, 避免特权面暴露全网(见 review S1)
 DSH_LAN_IP="${DSH_LAN_IP:-}"
 # 受信权威默认绑定 web 端口(而非硬编码 3080)——改 DSH_WEB_PORT 时默认权威自动跟随(见 review P1)
@@ -30,6 +39,73 @@ is_loopback() { # 检测 host 部分是否 loopback (含 IPv6 [::1] 方括号形
     *) return 1 ;;
   esac
 }
+
+# ---------------------------------------------------------------------------
+# HEADLESS 模式 (DSH_MODE=headless): 自动化测试单任务
+#   entrypoint 确保测试 profile + 自带的第三方插件就绪, 然后 exec 透传
+#   `dsh --profile <DSH_TEST_PROFILE> <任务...>` 跑完退出。
+#   headless 不做 TLS/relay/网络访问→不需要 DSH_LAN_IP, 故在 S1 校验之前返回。
+#   首次启动(数据卷空)自动 seed 测试 profile 源码 + 用 /plugs 修复版 tgz pnpm 安装。
+#   headless CLI 不经过 web 访问层 → 完全不需要 access token。
+# ---------------------------------------------------------------------------
+if [ "$DSH_MODE" = "headless" ]; then
+  export OLLAMA_API_KEY="${OLLAMA_API_KEY:-ollama-local}"
+  export B70_API_KEY="${B70_API_KEY:-local-b70}"
+  mkdir -p "$DSH_HOME"
+  if [ -z "$DSH_TEST_PROFILE" ]; then
+    echo "[entrypoint] ❌ DSH_MODE=headless 但未指定 DSH_TEST_PROFILE(要跑的 profile 名)。" >&2
+    exit 1
+  fi
+  PROFILE_DIR="$DSH_HOME/profiles/$DSH_TEST_PROFILE"
+  # 整个 headless 生命周期(seed/install/run)统一以 node 用户执行, 避免 root/node 属主混乱
+  ensure_node_home() { mkdir -p /home/node 2>/dev/null; chown -R 1000:1000 /home/node 2>/dev/null || true; }
+  # 可写数据目录: 插件的 SQLite DB/web-search-pro 等默认写到 $DSH_HOME/data/(见其 defaultDbPath)。
+  #   bind-mount 卷根通常是 root 属主, node 用户建不了 data → 提前建并给 node。
+  ensure_data_dir() { mkdir -p "$DSH_HOME/data" 2>/dev/null; chown -R 1000:1000 "$DSH_HOME/data" 2>/dev/null || true; }
+  PNPM_INSTALL='command -v pnpm >/dev/null 2>&1 && pnpm install --no-frozen-lockfile'
+  PLUG_DEPS_READY=0
+  if [ -f "$PROFILE_DIR/package.json" ]; then
+    tgz_num=$(grep -c "/plugs/" "$PROFILE_DIR/package.json" 2>/dev/null || true)
+    node_plugins=$(ls "$PROFILE_DIR"/node_modules/.pnpm 2>/dev/null | grep -c "dsh-browser\|web-search-pro" || true)
+    if [ -d "$PROFILE_DIR/node_modules" ] && [ "${node_plugins:-0}" -ge "${tgz_num:-0}" ] && [ "${tgz_num:-0}" -gt 0 ]; then
+      PLUG_DEPS_READY=1
+    fi
+  fi
+  if [ "$PLUG_DEPS_READY" != "1" ]; then
+    log "headless: 初始化测试 profile '$DSH_TEST_PROFILE' (首次启动? 卷空 or 缺插件)..."
+    ensure_node_home
+    ensure_data_dir
+    # seed: 以 node 用户建 profile + 拷模板(避免 root 属主)
+    if [ ! -f "$PROFILE_DIR/package.json" ] && [ -d "/opt/dsh-headless-profile" ]; then
+      runuser -u node -- sh -c "mkdir -p '$PROFILE_DIR' && cp -r /opt/dsh-headless-profile/. '$PROFILE_DIR/'" 2>&1
+      log "  seeded profile 源码 → $PROFILE_DIR (node 用户)"
+    fi
+    if [ ! -f "$PROFILE_DIR/package.json" ]; then
+      echo "[entrypoint] ❌ headless: 测试 profile '$DSH_TEST_PROFILE' 缺 package.json(且无 /opt/dsh-headless-profile 模板可 seed)。" >&2
+      exit 1
+    fi
+    log "  pnpm install 插件 (可能首次下载, 稍等)..."
+    # 不 tail: runuser 管道会因 tail 提前关闭 stdout → SIGPIPE 阻塞(见 skill 命令替换坑)。
+    # 关键: 必须 `|| true` —— pnpm 因 opencli build script 被供应链策略挡(ERR_PNPM_IGNORED_BUILDS)
+    #   返回非零, 在 set -euo pipefail 下会让整个脚本立即退出(预装没跑)! 忽略退出码,
+    #   以下方 node_modules 是否真含插件为准。
+    runuser -u node -- env DSH_HOME="$DSH_HOME" HOME=/home/node \
+      sh -c "cd '$PROFILE_DIR' && $PNPM_INSTALL" 2>&1 || true
+    # ⚠️ pnpm 可能因 opencli build script 被供应链策略挡(ERR_PNPM_IGNORED_BUILDS)退出非零,
+    #   但那不致命(opencli 可选后端)。以 node_modules 是否真含插件为准。
+    tgz_num=$(grep -c "/plugs/" "$PROFILE_DIR/package.json" 2>/dev/null || true)
+    recheck=$(runuser -u node -- sh -c "ls '$PROFILE_DIR'/node_modules/.pnpm 2>/dev/null | grep -c 'dsh-browser\|web-search-pro'" || true)
+    if [ "${recheck:-0}" -ge "${tgz_num:-0}" ] && [ "${tgz_num:-0}" -gt 0 ]; then
+      PLUG_DEPS_READY=1
+      log "  ✓ 插件依赖已就绪"
+    else
+      echo "[entrypoint] ⚠ headless: 插件依赖未确认装齐, 但仍尝试启动。" >&2
+    fi
+  fi
+  log "headless: exec dsh --profile '$DSH_TEST_PROFILE' $*"
+  exec runuser -u node -- env DSH_HOME="$DSH_HOME" HOME=/home/node \
+    dsh --profile "$DSH_TEST_PROFILE" "$@"
+fi
 
 if [ -z "$DSH_LAN_IP" ]; then
   echo "[entrypoint] ❌ 未设置 DSH_LAN_IP(部署机局域网 IP)。为保证不暴露特权面,拒绝启动。" >&2
