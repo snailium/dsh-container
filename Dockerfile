@@ -30,7 +30,9 @@ RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION}
 # 工程内置代码层: TLS relay + entrypoint
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/dsh-tls-relay.js /usr/local/bin/dsh-tls-relay.js
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# 宿主 umask 077 时 COPY 会保留 600/700 权限 → node(非root) 读不了 relay 脚本(EACCES)。
+# 显式归一: entrypoint(root 执行, 可 750), relay(node 需可读, 644)。
+RUN chmod 750 /usr/local/bin/entrypoint.sh && chmod 644 /usr/local/bin/dsh-tls-relay.js
 
 # 安全: dsh/relay 工作进程以非 root(node/uid1000) 运行。
 #   注意: 不在 Dockerfile 设 `USER node`——entrypoint 需要 root 权限生成/chown 证书
