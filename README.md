@@ -82,6 +82,45 @@ dsh 有三个东西要挂，缺一不可（尤其工作区）：
 
 配置 = bind-mount 整块 `harness-home` → 升级只换镜像, 数据永不丢。
 
+## 🤖 自动化测试 (headless) — 推荐形态
+
+> **这个容器化 dsh 的主要用途是自动化测试**（如 B70 每次更新后端后的 agent 测试）。生产使用建议裸机部署；容器作为**隔离测试 harness**最方便。
+
+**核心结论：headless CLI 完全不受 dsh 0.1.2 的 access-token 影响**——headless 模式跑单任务走 CLI 独立通道，不经 web 访问层，**零 token、零认证**，天然适合自动化测试。
+
+### 用法: DSH_MODE=headless
+
+```bash
+# 创建一个测试 DSH_HOME 卷(首次会自动 seed headless profile + 装 web 搜索插件)
+mkdir -p /home/user/dsh-test-home
+# settings.yaml: 声明被测 provider + 默认模型(按你的后端填)
+#   例: llm-pi-ai.providers.<name> + agent-default-model 指到它(或用 --patch 覆盖)
+
+# 跑一个 headless 单任务 (担默认 entrypoint, 非 docker run --entrypoint dsh)
+docker run --rm --network host \
+  -v /home/user/dsh-test-home:/dsh-home \
+  -e DSH_MODE=headless -e DSH_TEST_PROFILE=headless_wsp \
+  -e DSH_HOME=/dsh-home -e <API_KEY_ENV>=<key> -e HOME=/root \
+  <image> --patch /dsh-home/patch.yml "你的测试任务"
+# 首次启动: 自动 seed profile + pnpm 装插件 → 跑任务。之后复用卷每次跳过安装直接跑。
+# headless 不需要 DSH_LAN_IP(不做网络访问), 也不起 relay/TLS。
+```
+
+- `DSH_MODE=headless` + `DSH_TEST_PROFILE`(默认模板建于 `headless_wsp`) → entrypoint 自动确保 profile + 插件就绪后 `exec dsh --profile <p> <任务>`
+- 首次启动自动安装自带插件; 数据卷复用后跳过
+- `--patch` 覆盖默认模型/provider(或写 DSH_HOME/settings.yaml)
+
+### 自带插件: web 搜索 (@anweat/dsh-browser + dsh-web-search-pro)
+
+headless 测试 agent 有 **web 搜索需求**, 镜像自带两个 **dsh 0.1.2 修复版**插件 tgz(在 `/plugs/`, 首次启动自动安装):
+
+| 插件 | 版本 | 作用 |
+|---|---|---|
+| `@anweat/dsh-browser` | 0.1.10 | 浏览器服务(web-search-pro 的必需依赖, `inject: ['browser']`) |
+| `dsh-web-search-pro` | 0.1.11 | 多引擎 web 搜索工具(web_search_pro / web_fetch_pro 等) |
+
+> ⚠️ **这两个插件官方暂无 0.1.2 release**——上游使用的 `settingsNamespace`/`installSettingsSection` 在 dsh 0.1.2 被移除, 旧版在 0.1.2 上加载即崩。本镜像内置的是**本地修复+构建版**(src: `~/dsh-build/{dsh-browser-src,web-search-pro-src}`)。修复已提 PR 上游: `anweat/dsh-browser#12` + `anweat/dsh-web-search-pro#19`。官方合并发布兼容版后可切换到官方 npm 包(届时更新 /plugs 及模板)。
+
 ## 🔄 升级
 
 ```bash
