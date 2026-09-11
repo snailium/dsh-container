@@ -48,7 +48,10 @@ except: pass" 2>/dev/null) || deps=""
   # 检查是否全部已装 (scoped 包 @scope/name → pnpm 目录名用 + 替代 /)
   local missing=0
   for pkg in $deps; do
-    local search="${pkg/\//@}"   # @anweat/dsh-browser → @anweat+dsh-browser
+    local search="$pkg"
+    case "$pkg" in
+      @*) search="${pkg%%/*}+${pkg#*/}" ;;   # @anweat/dsh-browser → @anweat+dsh-browser
+    esac
     if ! ls "$profile_dir"/node_modules/.pnpm 2>/dev/null | grep -q "$search"; then
       missing=1; break
     fi
@@ -58,10 +61,13 @@ except: pass" 2>/dev/null) || deps=""
   log "  pnpm install 插件 (从 npm registry, 可能首次下载, 稍等)..."
   runuser -u node -- env DSH_HOME="$DSH_HOME" HOME=/home/node \
     sh -c "cd '$profile_dir' && command -v pnpm >/dev/null 2>&1 && pnpm install --no-frozen-lockfile" 2>&1 || true
-  # 复查(直接用当前用户, scoped 包同样用 + 替代 /)
+  # 复查(直接用当前用户, scoped 包同样处理)
   local recheck=0
   for pkg in $deps; do
-    local search="${pkg/\//@}"
+    local search="$pkg"
+    case "$pkg" in
+      @*) search="${pkg%%/*}+${pkg#*/}" ;;
+    esac
     if ! ls "$profile_dir"/node_modules/.pnpm 2>/dev/null | grep -q "$search"; then
       recheck=1; break
     fi
