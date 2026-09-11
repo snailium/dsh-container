@@ -120,14 +120,17 @@ docker run --rm --network host \
 | `dsh-web-search-pro` | 0.1.12-alpha.4 | 多引擎 web 搜索工具(web_search_pro / web_fetch_pro 等) |
 | `dsh-repeat-tool-breaker` | 0.1.2 | 重复工具调用防护(advisory reminder) |
 
-**web 模式 profile**（用户自建）需要额外安装:
+**web 模式 profile**（用户自建）首次启动自动安装:
 
 | 插件 | 版本 | 作用 |
 |---|---|---|
 | `dsh-relay` | 0.2.1 | DSH relay 插件(注入 webServer, 提供 TLS relay 前端) |
+| `@anweat/dsh-browser` | 0.1.12 | 浏览器服务(web-search-pro 的必需依赖) |
+| `dsh-web-search-pro` | 0.1.12-alpha.4 | 多引擎 web 搜索工具 |
 
-> headless profile 插件版本锁定在 `docker/headless-profile/package.json` dependencies 中。
-> web profile 的插件由用户自行在 profile 的 `package.json` 中声明并 `pnpm install`。
+> **自动安装机制**：entrypoint 启动时扫描 `$DSH_HOME/profiles/` 下所有含 `package.json` 的 profile，
+> 从 dependencies 提取包名（排除 `@deepseek-ai/dsh-*` 框架包），缺则自动 `pnpm install`。
+> headless 和 web 模式共用同一套逻辑。用户只需在 profile 的 `package.json` 中声明依赖版本，首次启动自动装齐。
 
 ## 🔄 升级
 
