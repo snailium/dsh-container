@@ -4,8 +4,7 @@
     "dependencies": {
         "@anweat/dsh-browser": "0.1.12",
         "dsh-web-search-pro": "0.1.12-alpha.4",
-        "dsh-repeat-tool-breaker": "0.1.2",
-        "dsh-relay": "0.2.1"
+        "dsh-repeat-tool-breaker": "0.1.2"
     },
     "dsh": {
         "profile": {

@@ -119,7 +119,6 @@ headless 测试 agent 有 **web 搜索 + 工具循环防护**需求, 首次启�
 | `@anweat/dsh-browser` | 0.1.12 | 浏览器服务(web-search-pro 的必需依赖, `inject: ['browser']`) |
 | `dsh-web-search-pro` | 0.1.12-alpha.4 | 多引擎 web 搜索工具(web_search_pro / web_fetch_pro 等) |
 | `dsh-repeat-tool-breaker` | 0.1.2 | 重复工具调用防护(advisory reminder) |
-| `dsh-relay` | 0.2.1 | DSH relay 插件 |
 
 > 插件版本锁定在 `docker/headless-profile/package.json` dependencies 中, 升级时修改版本号即可。
 
