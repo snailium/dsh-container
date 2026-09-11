@@ -53,14 +53,14 @@ except: pass" 2>/dev/null) || deps=""
     fi
   done
   [ "$missing" = "0" ] && return 0
-  # 缺依赖 → pnpm install
+  # 缺依赖 → pnpm install (以 node 用户执行, headless/web 统一)
   log "  pnpm install 插件 (从 npm registry, 可能首次下载, 稍等)..."
   runuser -u node -- env DSH_HOME="$DSH_HOME" HOME=/home/node \
     sh -c "cd '$profile_dir' && command -v pnpm >/dev/null 2>&1 && pnpm install --no-frozen-lockfile" 2>&1 || true
-  # 复查
+  # 复查(直接用当前用户, 避免 runuser 权限问题)
   local recheck=0
   for pkg in $deps; do
-    if ! runuser -u node -- sh -c "ls '$profile_dir'/node_modules/.pnpm 2>/dev/null | grep -q '$pkg'" 2>/dev/null; then
+    if ! ls "$profile_dir"/node_modules/.pnpm 2>/dev/null | grep -q "$pkg"; then
       recheck=1; break
     fi
   done
