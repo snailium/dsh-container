@@ -13,8 +13,7 @@
                 "@deepseek-ai/dsh-base",
                 "@deepseek-ai/dsh-headless",
                 "@anweat/dsh-browser",
-                "dsh-web-search-pro",
-                "dsh-relay"
+                "dsh-web-search-pro"
             ],
             "patchReload": "startup"
         }

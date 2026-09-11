@@ -57,6 +57,8 @@ if [ "$DSH_MODE" = "headless" ]; then
     exit 1
   fi
   PROFILE_DIR="$DSH_HOME/profiles/$DSH_TEST_PROFILE"
+  # dsh-relay 需要 webServer 服务, headless CLI 没有 → 禁用(见 cordis.yml relay entry)
+  export DSH_RELAY_DISABLE=1
   # 整个 headless 生命周期(seed/install/run)统一以 node 用户执行, 避免 root/node 属主混乱
   ensure_node_home() { mkdir -p /home/node 2>/dev/null; chown -R 1000:1000 /home/node 2>/dev/null || true; }
   # 可写数据目录: 插件的 SQLite DB/web-search-pro 等默认写到 $DSH_HOME/data/(见其 defaultDbPath)。

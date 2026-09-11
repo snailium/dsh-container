@@ -2,6 +2,22 @@
 # headless 测试 profile 模板: base+headless + web 搜索 + relay + repeat-tool-breaker。
 # 默认模型/provider 由使用方在 DSH_HOME/settings.yaml 或 --patch 指定。
 # dsh-repeat-tool-breaker 无 dsh.bundle 字段, 通过 cordis patch 挂载(非 bundle)。
+# dsh-relay 需要 webServer 服务(headless CLI 没有), 用 DSH_RELAY_DISABLE=1 禁用;
+#   web 模式(dsh web)下 entrypoint 不设此变量, relay 正常启动。
+- insert:
+    - id: relay
+      name: dsh-relay
+      disabled: !!js process.env.DSH_RELAY_DISABLE === '1'
+      config:
+        bind: !!js process.env.DSH_RELAY_BIND ?? '0.0.0.0'
+        port: !!js Number(process.env.DSH_RELAY_PORT ?? 3443)
+        stateDir: !!js dshHomePath('relay')
+        tls: !!js process.env.DSH_RELAY_TLS ?? 'self-signed'
+        publicHostnames: []
+        compat:
+          addressGrants: true
+          addressGrantTtlMs: 86400000
+          plainPort: !!js Number(process.env.DSH_RELAY_PLAIN_PORT ?? 0)
 - insert:
     - id: repeat-tool-breaker
       name: dsh-repeat-tool-breaker
