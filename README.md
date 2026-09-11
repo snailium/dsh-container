@@ -112,7 +112,7 @@ docker run --rm --network host \
 
 ### 自带插件 (npm registry 安装)
 
-headless 测试 agent 有 **web 搜索 + 工具循环防护**需求, 首次启动从 npm registry 自动安装以下插件:
+**headless 测试 profile**（模板: `docker/headless-profile/`）首次启动自动安装:
 
 | 插件 | 版本 | 作用 |
 |---|---|---|
@@ -120,7 +120,14 @@ headless 测试 agent 有 **web 搜索 + 工具循环防护**需求, 首次启�
 | `dsh-web-search-pro` | 0.1.12-alpha.4 | 多引擎 web 搜索工具(web_search_pro / web_fetch_pro 等) |
 | `dsh-repeat-tool-breaker` | 0.1.2 | 重复工具调用防护(advisory reminder) |
 
-> 插件版本锁定在 `docker/headless-profile/package.json` dependencies 中, 升级时修改版本号即可。
+**web 模式 profile**（用户自建）需要额外安装:
+
+| 插件 | 版本 | 作用 |
+|---|---|---|
+| `dsh-relay` | 0.2.1 | DSH relay 插件(注入 webServer, 提供 TLS relay 前端) |
+
+> headless profile 插件版本锁定在 `docker/headless-profile/package.json` dependencies 中。
+> web profile 的插件由用户自行在 profile 的 `package.json` 中声明并 `pnpm install`。
 
 ## 🔄 升级
 
