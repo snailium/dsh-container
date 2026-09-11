@@ -27,6 +27,53 @@ DSH_TRUSTED_AUTHORITY="${DSH_TRUSTED_AUTHORITY:-${DSH_LAN_IP}:${DSH_WEB_PORT}}"
 log()  { echo "[entrypoint] $*"; }   # 定义在最先, 供下方 S1 校验使用
 
 # ---------------------------------------------------------------------------
+# 通用: profile 插件依赖检查 + pnpm install
+#   从 profile package.json dependencies 提取包名(排除 @deepseek-ai/dsh-*),
+#   检查 node_modules/.pnpm 是否齐全; 缺则 pnpm install。
+#   返回 0=就绪, 1=安装失败(仍尝试启动)。
+# ---------------------------------------------------------------------------
+ensure_profile_plugins() { # $1=profile目录
+  local profile_dir="$1"
+  [ -f "$profile_dir/package.json" ] || return 0
+  # 从 package.json dependencies 提取包名(排除 dsh-base/dsh-headless 等框架包)
+  local deps
+  deps=$(python3 -c "
+import json,sys
+try:
+  d=json.load(open('$profile_dir/package.json'))
+  for k in d.get('dependencies',{}):
+    if not k.startswith('@deepseek-ai/dsh-'): print(k)
+except: pass" 2>/dev/null) || deps=""
+  [ -z "$deps" ] && return 0
+  # 检查是否全部已装
+  local missing=0
+  for pkg in $deps; do
+    if ! ls "$profile_dir"/node_modules/.pnpm 2>/dev/null | grep -q "$pkg"; then
+      missing=1; break
+    fi
+  done
+  [ "$missing" = "0" ] && return 0
+  # 缺依赖 → pnpm install
+  log "  pnpm install 插件 (从 npm registry, 可能首次下载, 稍等)..."
+  runuser -u node -- env DSH_HOME="$DSH_HOME" HOME=/home/node \
+    sh -c "cd '$profile_dir' && command -v pnpm >/dev/null 2>&1 && pnpm install --no-frozen-lockfile" 2>&1 || true
+  # 复查
+  local recheck=0
+  for pkg in $deps; do
+    if ! runuser -u node -- sh -c "ls '$profile_dir'/node_modules/.pnpm 2>/dev/null | grep -q '$pkg'" 2>/dev/null; then
+      recheck=1; break
+    fi
+  done
+  if [ "$recheck" = "0" ]; then
+    log "  ✓ 插件依赖已就绪"
+    return 0
+  else
+    echo "[entrypoint] ⚠ 插件依赖未确认装齐, 但仍尝试启动。" >&2
+    return 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # FAIL-CLOSED 启动校验 (review S1):
 #   relay 绑 0.0.0.0(全网) + host 网络时, DSH_TRUSTED_AUTHORITY 若解析为 loopback,
 #   dsh 的 loopback-only 特权方法(fence)会对全网放行 → 特权面暴露。
@@ -62,57 +109,21 @@ if [ "$DSH_MODE" = "headless" ]; then
   # 可写数据目录: 插件的 SQLite DB/web-search-pro 等默认写到 $DSH_HOME/data/(见其 defaultDbPath)。
   #   bind-mount 卷根通常是 root 属主, node 用户建不了 data → 提前建并给 node。
   ensure_data_dir() { mkdir -p "$DSH_HOME/data" 2>/dev/null; chown -R 1000:1000 "$DSH_HOME/data" 2>/dev/null || true; }
-  PNPM_INSTALL='command -v pnpm >/dev/null 2>&1 && pnpm install --no-frozen-lockfile'
-  # 期望的插件包名(来自 profile package.json dependencies, 排除 dsh-base/dsh-headless)
-  EXPECTED_PLUGINS="dsh-browser web-search-pro repeat-tool-breaker"
-  PLUG_DEPS_READY=0
-  if [ -f "$PROFILE_DIR/package.json" ]; then
-    # node_modules/.pnpm 下每个插件会有 @scope+name@version 或 name@version 目录
-    missing=0
-    for pkg in $EXPECTED_PLUGINS; do
-      if ! ls "$PROFILE_DIR"/node_modules/.pnpm 2>/dev/null | grep -q "$pkg"; then
-        missing=1
-        break
-      fi
-    done
-    [ "$missing" = "0" ] && PLUG_DEPS_READY=1
-  fi
-  if [ "$PLUG_DEPS_READY" != "1" ]; then
-    log "headless: 初始化测试 profile '$DSH_TEST_PROFILE' (首次启动? 卷空 or 缺插件)..."
-    ensure_node_home
-    ensure_data_dir
+  if [ ! -f "$PROFILE_DIR/package.json" ]; then
     # seed: 以 node 用户建 profile + 拷模板(避免 root 属主)
-    if [ ! -f "$PROFILE_DIR/package.json" ] && [ -d "/opt/dsh-headless-profile" ]; then
+    if [ -d "/opt/dsh-headless-profile" ]; then
+      log "headless: 初始化测试 profile '$DSH_TEST_PROFILE' (首次启动? 卷空 or 缺插件)..."
+      ensure_node_home
+      ensure_data_dir
       runuser -u node -- sh -c "mkdir -p '$PROFILE_DIR' && cp -r /opt/dsh-headless-profile/. '$PROFILE_DIR/'" 2>&1
       log "  seeded profile 源码 → $PROFILE_DIR (node 用户)"
-    fi
-    if [ ! -f "$PROFILE_DIR/package.json" ]; then
+    else
       echo "[entrypoint] ❌ headless: 测试 profile '$DSH_TEST_PROFILE' 缺 package.json(且无 /opt/dsh-headless-profile 模板可 seed)。" >&2
       exit 1
     fi
-    log "  pnpm install 插件 (从 npm registry, 可能首次下载, 稍等)..."
-    # 不 tail: runuser 管道会因 tail 提前关闭 stdout → SIGPIPE 阻塞(见 skill 命令替换坑)。
-    # 关键: 必须 `|| true` —— pnpm 因 opencli build script 被供应链策略挡(ERR_PNPM_IGNORED_BUILDS)
-    #   返回非零, 在 set -euo pipefail 下会让整个脚本立即退出(预装没跑)! 忽略退出码,
-    #   以下方 node_modules 是否真含插件为准。
-    runuser -u node -- env DSH_HOME="$DSH_HOME" HOME=/home/node \
-      sh -c "cd '$PROFILE_DIR' && $PNPM_INSTALL" 2>&1 || true
-    # ⚠️ pnpm 可能因 opencli build script 被供应链策略挡(ERR_PNPM_IGNORED_BUILDS)退出非零,
-    #   但那不致命(opencli 可选后端)。以 node_modules 是否真含插件为准。
-    recheck_missing=0
-    for pkg in $EXPECTED_PLUGINS; do
-      if ! runuser -u node -- sh -c "ls '$PROFILE_DIR'/node_modules/.pnpm 2>/dev/null | grep -q '$pkg'" 2>/dev/null; then
-        recheck_missing=1
-        break
-      fi
-    done
-    if [ "$recheck_missing" = "0" ]; then
-      PLUG_DEPS_READY=1
-      log "  ✓ 插件依赖已就绪"
-    else
-      echo "[entrypoint] ⚠ headless: 插件依赖未确认装齐, 但仍尝试启动。" >&2
-    fi
   fi
+  # 检查 + 安装插件依赖(通用函数)
+  ensure_profile_plugins "$PROFILE_DIR" || true
   log "headless: exec dsh --profile '$DSH_TEST_PROFILE' $*"
   exec runuser -u node -- env DSH_HOME="$DSH_HOME" HOME=/home/node \
     dsh --profile "$DSH_TEST_PROFILE" "$@"
@@ -214,6 +225,20 @@ if [ "$owner" = "0" ]; then
   chown "$DSH_RUN_UID:$DSH_RUN_GID" "$DSH_HOME" 2>/dev/null || true
 fi
 log "运行数据所有权检查完成 (仅接管 root 属主的遗留产物, 不改动其它 uid 宿主数据)"
+
+# ---------------------------------------------------------------------------
+# 1.5) Web 模式: 扫描所有 profile, 自动补装缺失的插件依赖
+#   用户自建的 profile(如含 dsh-relay/dsh-browser/web-search-pro)首次启动时
+#   node_modules 不存在 → 自动 pnpm install。之后复用卷跳过。
+# ---------------------------------------------------------------------------
+if [ -d "$DSH_HOME/profiles" ]; then
+  for pf in "$DSH_HOME/profiles"/*/; do
+    [ -f "$pf/package.json" ] || continue
+    pname=$(basename "$pf")
+    log "web: 检查 profile '$pname' 插件依赖..."
+    ensure_profile_plugins "${pf%/}" || true
+  done
+fi
 
 # ---------------------------------------------------------------------------
 # 2) 启动 TLS relay + dsh web 双进程, 互相看护
