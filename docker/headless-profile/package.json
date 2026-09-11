@@ -2,8 +2,10 @@
     "name": "dsh-profile-headless",
     "private": true,
     "dependencies": {
-        "@anweat/dsh-browser": "file:/plugs/anweat-dsh-browser-0.1.10.tgz",
-        "dsh-web-search-pro": "file:/plugs/dsh-web-search-pro-0.1.11.tgz"
+        "@anweat/dsh-browser": "0.1.12",
+        "dsh-web-search-pro": "0.1.12-alpha.4",
+        "dsh-repeat-tool-breaker": "0.1.2",
+        "dsh-relay": "0.2.1"
     },
     "dsh": {
         "profile": {
@@ -11,7 +13,9 @@
                 "@deepseek-ai/dsh-base",
                 "@deepseek-ai/dsh-headless",
                 "@anweat/dsh-browser",
-                "dsh-web-search-pro"
+                "dsh-web-search-pro",
+                "dsh-repeat-tool-breaker",
+                "dsh-relay"
             ],
             "patchReload": "startup"
         }

@@ -29,24 +29,24 @@ RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION}
 
 # headless 自动化测试: entrypoint 首次启动用 pnpm 安装测试 profile 插件。
 #   pnpm 在镜像构建期 `npm i -g pnpm` 装好(避免运行时 corepack 首次下载挂起)。
-#   ⚠️ npm 官方 0.1.2 兼容版插件尚未发布, 这里的修复版 tgz 是本地构建:
-#   - anweat-dsh-browser-0.1.10 (src: ~/dsh-build/dsh-browser-src)
-#   - dsh-web-search-pro-0.1.11 (src: ~/dsh-build/web-search-pro-src)
-#   官方发布兼容版后可切换为直接来自 npm 安装(见 README 自动化测试节)。
+#   插件从 npm registry 直接安装(官方兼容版已发布):
+#   - @anweat/dsh-browser@0.1.12
+#   - dsh-web-search-pro@0.1.12-alpha.4
+#   - dsh-repeat-tool-breaker@0.1.2
+#   - dsh-relay@0.2.1
 RUN npm i -g pnpm
 
-# 工程内置代码层: TLS relay + entrypoint + 自动化测试插件
+# 工程内置代码层: TLS relay + entrypoint
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/dsh-tls-relay.js /usr/local/bin/dsh-tls-relay.js
 # 宿主 umask 077 时 COPY 会保留 600/700 权限 → node(非root) 读不了 relay 脚本(EACCES)。
 # 显式归一: entrypoint(root 执行, 可 750), relay(node 需可读, 644)。
 RUN chmod 750 /usr/local/bin/entrypoint.sh && chmod 644 /usr/local/bin/dsh-tls-relay.js
 
-# headless 自动化测试用的第三方插件 tgz (修复版) + profile 模板:
-#   entrypoint DSH_MODE=headless 首次启动会从 /plugs 安装它们到数据卷测试 profile。
-COPY docker/plugs/ /plugs/
+# headless 自动化测试用的 profile 模板:
+#   entrypoint DSH_MODE=headless 首次启动会 seed 模板到数据卷, 然后 pnpm install
+#   从 npm registry 安装插件(见 package.json dependencies)。
 COPY docker/headless-profile/ /opt/dsh-headless-profile/
-RUN chmod 644 /plugs/*.tgz
 
 # 安全: dsh/relay 工作进程以非 root(node/uid1000) 运行。
 #   注意: 不在 Dockerfile 设 `USER node`——entrypoint 需要 root 权限生成/chown 证书

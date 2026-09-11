@@ -63,13 +63,19 @@ if [ "$DSH_MODE" = "headless" ]; then
   #   bind-mount 卷根通常是 root 属主, node 用户建不了 data → 提前建并给 node。
   ensure_data_dir() { mkdir -p "$DSH_HOME/data" 2>/dev/null; chown -R 1000:1000 "$DSH_HOME/data" 2>/dev/null || true; }
   PNPM_INSTALL='command -v pnpm >/dev/null 2>&1 && pnpm install --no-frozen-lockfile'
+  # 期望的插件包名(来自 profile package.json dependencies, 排除 dsh-base/dsh-headless)
+  EXPECTED_PLUGINS="dsh-browser web-search-pro repeat-tool-breaker dsh-relay"
   PLUG_DEPS_READY=0
   if [ -f "$PROFILE_DIR/package.json" ]; then
-    tgz_num=$(grep -c "/plugs/" "$PROFILE_DIR/package.json" 2>/dev/null || true)
-    node_plugins=$(ls "$PROFILE_DIR"/node_modules/.pnpm 2>/dev/null | grep -c "dsh-browser\|web-search-pro" || true)
-    if [ -d "$PROFILE_DIR/node_modules" ] && [ "${node_plugins:-0}" -ge "${tgz_num:-0}" ] && [ "${tgz_num:-0}" -gt 0 ]; then
-      PLUG_DEPS_READY=1
-    fi
+    # node_modules/.pnpm 下每个插件会有 @scope+name@version 或 name@version 目录
+    missing=0
+    for pkg in $EXPECTED_PLUGINS; do
+      if ! ls "$PROFILE_DIR"/node_modules/.pnpm 2>/dev/null | grep -q "$pkg"; then
+        missing=1
+        break
+      fi
+    done
+    [ "$missing" = "0" ] && PLUG_DEPS_READY=1
   fi
   if [ "$PLUG_DEPS_READY" != "1" ]; then
     log "headless: 初始化测试 profile '$DSH_TEST_PROFILE' (首次启动? 卷空 or 缺插件)..."
@@ -84,7 +90,7 @@ if [ "$DSH_MODE" = "headless" ]; then
       echo "[entrypoint] ❌ headless: 测试 profile '$DSH_TEST_PROFILE' 缺 package.json(且无 /opt/dsh-headless-profile 模板可 seed)。" >&2
       exit 1
     fi
-    log "  pnpm install 插件 (可能首次下载, 稍等)..."
+    log "  pnpm install 插件 (从 npm registry, 可能首次下载, 稍等)..."
     # 不 tail: runuser 管道会因 tail 提前关闭 stdout → SIGPIPE 阻塞(见 skill 命令替换坑)。
     # 关键: 必须 `|| true` —— pnpm 因 opencli build script 被供应链策略挡(ERR_PNPM_IGNORED_BUILDS)
     #   返回非零, 在 set -euo pipefail 下会让整个脚本立即退出(预装没跑)! 忽略退出码,
@@ -93,9 +99,14 @@ if [ "$DSH_MODE" = "headless" ]; then
       sh -c "cd '$PROFILE_DIR' && $PNPM_INSTALL" 2>&1 || true
     # ⚠️ pnpm 可能因 opencli build script 被供应链策略挡(ERR_PNPM_IGNORED_BUILDS)退出非零,
     #   但那不致命(opencli 可选后端)。以 node_modules 是否真含插件为准。
-    tgz_num=$(grep -c "/plugs/" "$PROFILE_DIR/package.json" 2>/dev/null || true)
-    recheck=$(runuser -u node -- sh -c "ls '$PROFILE_DIR'/node_modules/.pnpm 2>/dev/null | grep -c 'dsh-browser\|web-search-pro'" || true)
-    if [ "${recheck:-0}" -ge "${tgz_num:-0}" ] && [ "${tgz_num:-0}" -gt 0 ]; then
+    recheck_missing=0
+    for pkg in $EXPECTED_PLUGINS; do
+      if ! runuser -u node -- sh -c "ls '$PROFILE_DIR'/node_modules/.pnpm 2>/dev/null | grep -q '$pkg'" 2>/dev/null; then
+        recheck_missing=1
+        break
+      fi
+    done
+    if [ "$recheck_missing" = "0" ]; then
       PLUG_DEPS_READY=1
       log "  ✓ 插件依赖已就绪"
     else

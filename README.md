@@ -110,16 +110,18 @@ docker run --rm --network host \
 - 首次启动自动安装自带插件; 数据卷复用后跳过
 - `--patch` 覆盖默认模型/provider(或写 DSH_HOME/settings.yaml)
 
-### 自带插件: web 搜索 (@anweat/dsh-browser + dsh-web-search-pro)
+### 自带插件 (npm registry 安装)
 
-headless 测试 agent 有 **web 搜索需求**, 镜像自带两个 **dsh 0.1.2 修复版**插件 tgz(在 `/plugs/`, 首次启动自动安装):
+headless 测试 agent 有 **web 搜索 + 工具循环防护**需求, 首次启动从 npm registry 自动安装以下插件:
 
 | 插件 | 版本 | 作用 |
 |---|---|---|
-| `@anweat/dsh-browser` | 0.1.10 | 浏览器服务(web-search-pro 的必需依赖, `inject: ['browser']`) |
-| `dsh-web-search-pro` | 0.1.11 | 多引擎 web 搜索工具(web_search_pro / web_fetch_pro 等) |
+| `@anweat/dsh-browser` | 0.1.12 | 浏览器服务(web-search-pro 的必需依赖, `inject: ['browser']`) |
+| `dsh-web-search-pro` | 0.1.12-alpha.4 | 多引擎 web 搜索工具(web_search_pro / web_fetch_pro 等) |
+| `dsh-repeat-tool-breaker` | 0.1.2 | 重复工具调用防护(advisory reminder) |
+| `dsh-relay` | 0.2.1 | DSH relay 插件 |
 
-> ⚠️ **这两个插件官方暂无 0.1.2 release**——上游使用的 `settingsNamespace`/`installSettingsSection` 在 dsh 0.1.2 被移除, 旧版在 0.1.2 上加载即崩。本镜像内置的是**本地修复+构建版**(src: `~/dsh-build/{dsh-browser-src,web-search-pro-src}`)。修复已提 PR 上游: `anweat/dsh-browser#12` + `anweat/dsh-web-search-pro#19`。官方合并发布兼容版后可切换到官方 npm 包(届时更新 /plugs 及模板)。
+> 插件版本锁定在 `docker/headless-profile/package.json` dependencies 中, 升级时修改版本号即可。
 
 ## 🔄 升级
 
