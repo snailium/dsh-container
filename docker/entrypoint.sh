@@ -45,10 +45,11 @@ try:
     if not k.startswith('@deepseek-ai/dsh-'): print(k)
 except: pass" 2>/dev/null) || deps=""
   [ -z "$deps" ] && return 0
-  # 检查是否全部已装
+  # 检查是否全部已装 (scoped 包 @scope/name → pnpm 目录名用 + 替代 /)
   local missing=0
   for pkg in $deps; do
-    if ! ls "$profile_dir"/node_modules/.pnpm 2>/dev/null | grep -q "$pkg"; then
+    local search="${pkg/\//@}"   # @anweat/dsh-browser → @anweat+dsh-browser
+    if ! ls "$profile_dir"/node_modules/.pnpm 2>/dev/null | grep -q "$search"; then
       missing=1; break
     fi
   done
@@ -57,10 +58,11 @@ except: pass" 2>/dev/null) || deps=""
   log "  pnpm install 插件 (从 npm registry, 可能首次下载, 稍等)..."
   runuser -u node -- env DSH_HOME="$DSH_HOME" HOME=/home/node \
     sh -c "cd '$profile_dir' && command -v pnpm >/dev/null 2>&1 && pnpm install --no-frozen-lockfile" 2>&1 || true
-  # 复查(直接用当前用户, 避免 runuser 权限问题)
+  # 复查(直接用当前用户, scoped 包同样用 + 替代 /)
   local recheck=0
   for pkg in $deps; do
-    if ! ls "$profile_dir"/node_modules/.pnpm 2>/dev/null | grep -q "$pkg"; then
+    local search="${pkg/\//@}"
+    if ! ls "$profile_dir"/node_modules/.pnpm 2>/dev/null | grep -q "$search"; then
       recheck=1; break
     fi
   done
