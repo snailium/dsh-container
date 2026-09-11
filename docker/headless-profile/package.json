@@ -14,7 +14,6 @@
                 "@deepseek-ai/dsh-headless",
                 "@anweat/dsh-browser",
                 "dsh-web-search-pro",
-                "dsh-repeat-tool-breaker",
                 "dsh-relay"
             ],
             "patchReload": "startup"
