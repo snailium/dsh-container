@@ -32,7 +32,7 @@ RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION}
 #   插件从 npm registry 直接安装(官方兼容版已发布):
 #   - @anweat/dsh-browser@0.1.12
 #   - dsh-web-search-pro@0.1.12-alpha.4
-#   - dsh-repeat-tool-breaker@0.1.2
+#   - dsh-repeat-tool-breaker@0.1.3
 RUN npm i -g pnpm
 
 # 工程内置代码层: TLS relay + entrypoint
