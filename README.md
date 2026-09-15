@@ -118,7 +118,7 @@ docker run --rm --network host \
 |---|---|---|
 | `@anweat/dsh-browser` | 0.1.12 | 浏览器服务(web-search-pro 的必需依赖, `inject: ['browser']`) |
 | `dsh-web-search-pro` | 0.1.12-alpha.4 | 多引擎 web 搜索工具(web_search_pro / web_fetch_pro 等) |
-| `dsh-repeat-tool-breaker` | 0.3.1 | 重复工具调用防护(语义指纹 + 滑动窗口; 忽略 description/timeoutMs 等诱饵参数; 主机别名与易变 flag 归一化; 文件操作按「位置」判定; 同一动作第 3 次才硬拦; 本机/内网地址 `localHosts` 默认 `ask`，但审批是 fail-closed 的：本镜像无应答方时返回 `unavailable` → **自动退化成 deny**，不会卡住 turn） |
+| `dsh-repeat-tool-breaker` | 0.3.2 | 重复工具调用防护(语义指纹 + 滑动窗口; 忽略 description/timeoutMs 等诱饵参数; 主机别名与易变 flag 归一化; 文件操作按「位置」判定; 同一动作第 3 次才硬拦; 本机/内网地址 `localHosts` 默认 `ask`，无应答方时自动退化成 deny；量级预算（site/family/verb）默认关闭——分页/批量抓取不再被误判为重复） |
 
 **web 模式 profile**（用户自建）首次启动自动安装:
 
