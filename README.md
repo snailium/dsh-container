@@ -118,7 +118,7 @@ docker run --rm --network host \
 |---|---|---|
 | `@anweat/dsh-browser` | 0.1.12 | 浏览器服务(web-search-pro 的必需依赖, `inject: ['browser']`) |
 | `dsh-web-search-pro` | 0.1.12-alpha.4 | 多引擎 web 搜索工具(web_search_pro / web_fetch_pro 等) |
-| `dsh-repeat-tool-breaker` | 0.2.0 | 重复工具调用防护(语义指纹 + 滑动窗口; 忽略 description/timeoutMs 等诱饵参数, 主机别名与易变 flag 归一化) |
+| `dsh-repeat-tool-breaker` | 0.2.1 | 重复工具调用防护(语义指纹 + 滑动窗口; 忽略 description/timeoutMs 等诱饵参数, 主机别名与易变 flag 归一化; `writepath` 默认关闭——反复编辑同一文件属正常工作) |
 
 **web 模式 profile**（用户自建）首次启动自动安装:
 
