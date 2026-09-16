@@ -34,7 +34,7 @@ RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION}
 #   - dsh-web-search-pro@0.1.12-alpha.6
 #   - dsh-relay@0.2.1
 #   - dsh-opencode-session@0.1.1
-#   - dsh-repeat-tool-breaker@^0.3.2
+#   - dsh-repeat-tool-breaker@^0.3.3
 #   - dsh-command-context-trim@^0.1.1
 RUN npm i -g pnpm
 
