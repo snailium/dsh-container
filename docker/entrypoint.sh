@@ -58,7 +58,8 @@ except: pass" 2>/dev/null) || deps=""
   done
   [ "$missing" = "0" ] && return 0
   # 缺依赖 → pnpm install (以 node 用户执行, headless/web 统一)
-  log "  pnpm install 插件 (从 npm registry, 可能首次下载, 稍等)..."
+  #   file: 依赖从镜像内 /plugs/ vendor tgz 离线安装; 非 file: 依赖走 registry。
+  log "  pnpm install 插件 (vendor tgz 离线安装)..."
   runuser -u node -- env DSH_HOME="$DSH_HOME" HOME=/home/node \
     sh -c "cd '$profile_dir' && command -v pnpm >/dev/null 2>&1 && pnpm install --no-frozen-lockfile" 2>&1 || true
   # 复查(直接用当前用户, scoped 包同样处理)

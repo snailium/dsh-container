@@ -110,30 +110,37 @@ docker run --rm --network host \
 - 首次启动自动安装自带插件; 数据卷复用后跳过
 - `--patch` 覆盖默认模型/provider(或写 DSH_HOME/settings.yaml)
 
-### 自带插件 (npm registry 安装)
+### 自带插件 (vendor tgz 离线安装)
+
+插件以 vendor tgz 形式烘焙进镜像 `/plugs/`，运行时离线安装（不依赖网络）。
+`dsh-relay` 为本地构建版；其余从 npm registry pack 而来。
 
 **headless 测试 profile**（模板: `docker/headless-profile/`）首次启动自动安装:
 
-| 插件 | 版本 | 作用 |
-|---|---|---|
-| `@anweat/dsh-browser` | 0.1.14-alpha.2 | 浏览器服务(web-search-pro 的必需依赖, `inject: ['browser']`) |
-| `dsh-web-search-pro` | 0.1.12-alpha.6 | 多引擎 web 搜索工具(web_search_pro / web_fetch_pro 等) |
-| `dsh-relay` | 0.2.1 | DSH relay 插件(注入 webServer, 提供 TLS relay 前端) |
-| `dsh-opencode-session` | 0.1.1 | OpenCode 会话集成 |
-| `dsh-repeat-tool-breaker` | ^0.3.3 | 重复工具调用防护(语义指纹 + 滑动窗口; 忽略 description/timeoutMs 等诱饵参数; 主机别名与易变 flag 归一化; 文件操作按「位置」判定; 同一动作第 3 次才硬拦; 本机/内网地址 `localHosts` 默认 `ask`，无应答方时自动退化成 deny；量级预算（site/family/verb）默认关闭——分页/批量抓取不再被误判为重复） |
-| `dsh-command-context-trim` | ^0.1.1 | 命令上下文修剪(减少 token 消耗) |
+| 插件 | 版本 | 来源 | 作用 |
+|---|---|---|---|
+| `@anweat/dsh-browser` | 0.1.14-alpha.2 | npm pack | 浏览器服务(web-search-pro 的必需依赖) |
+| `dsh-web-search-pro` | 0.1.12-alpha.6 | npm pack | 多引擎 web 搜索工具 |
+| `dsh-relay` | 0.2.1 | **本地构建** | DSH relay 插件(注入 webServer, TLS relay 前端) |
+| `dsh-opencode-session` | 0.1.1 | npm pack | OpenCode 会话集成 |
+| `dsh-repeat-tool-breaker` | 0.3.3 | npm pack | 重复工具调用防护(语义指纹+滑动窗口) |
+| `dsh-command-context-trim` | 0.1.1 | npm pack | 命令上下文修剪(减少 token 消耗) |
 
 **web 模式 profile**（用户自建）首次启动自动安装:
 
-| 插件 | 版本 | 作用 |
-|---|---|---|
-| `dsh-relay` | 0.2.1 | DSH relay 插件(注入 webServer, 提供 TLS relay 前端) |
-| `@anweat/dsh-browser` | 0.1.14-alpha.2 | 浏览器服务(web-search-pro 的必需依赖) |
-| `dsh-web-search-pro` | 0.1.12-alpha.6 | 多引擎 web 搜索工具 |
+| 插件 | 版本 | 来源 | 作用 |
+|---|---|---|---|
+| `dsh-relay` | 0.2.1 | **本地构建** | DSH relay 插件(注入 webServer, TLS relay 前端) |
+| `@anweat/dsh-browser` | 0.1.14-alpha.2 | npm pack | 浏览器服务 |
+| `dsh-web-search-pro` | 0.1.12-alpha.6 | npm pack | 多引擎 web 搜索工具 |
 
 > **自动安装机制**：entrypoint 启动时扫描 `$DSH_HOME/profiles/` 下所有含 `package.json` 的 profile，
 > 从 dependencies 提取包名（排除 `@deepseek-ai/dsh-*` 框架包），缺则自动 `pnpm install`。
-> headless 和 web 模式共用同一套逻辑。用户只需在 profile 的 `package.json` 中声明依赖版本，首次启动自动装齐。
+> `file:` 依赖从镜像内 `/plugs/` vendor tgz 离线安装；非 `file:` 依赖走 npm registry。
+> headless 和 web 模式共用同一套逻辑。
+
+> **更新插件**：修改 `docker/plugs/` 中的 tgz 文件 + `package.json` 的 `file:` 路径，重新构建镜像即可。
+> dsh-relay 需本地构建后替换 `docker/plugs/dsh-relay-*.tgz`。
 
 ## 🔄 升级
 
