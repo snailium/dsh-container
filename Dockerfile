@@ -32,7 +32,7 @@ RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION}
 #   插件以 vendor tgz 形式烘焙进镜像 /plugs/, 离线安装(不依赖运行时网络):
 #   - @anweat/dsh-browser@0.1.14-alpha.2
 #   - dsh-web-search-pro@0.1.12-alpha.6
-#   - dsh-relay@0.2.1 (本地构建)
+#   - dsh-relay@0.2.1 (本地构建, 仅 web profile 使用; headless 不装——无 webServer 服务)
 #   - dsh-opencode-session@0.1.1
 #   - dsh-repeat-tool-breaker@0.3.3
 #   - dsh-command-context-trim@0.1.1
