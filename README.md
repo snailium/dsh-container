@@ -120,7 +120,7 @@ docker run --rm --network host \
 | `dsh-web-search-pro` | 0.1.12-alpha.6 | 多引擎 web 搜索工具(web_search_pro / web_fetch_pro 等) |
 | `dsh-relay` | 0.2.1 | DSH relay 插件(注入 webServer, 提供 TLS relay 前端) |
 | `dsh-opencode-session` | 0.1.1 | OpenCode 会话集成 |
-| `dsh-repeat-tool-breaker` | ^0.3.2 | 重复工具调用防护(deny 第 2 次完全相同调用) |
+| `dsh-repeat-tool-breaker` | ^0.3.2 | 重复工具调用防护(语义指纹 + 滑动窗口; 忽略 description/timeoutMs 等诱饵参数; 主机别名与易变 flag 归一化; 文件操作按「位置」判定; 同一动作第 3 次才硬拦; 本机/内网地址 `localHosts` 默认 `ask`，无应答方时自动退化成 deny；量级预算（site/family/verb）默认关闭——分页/批量抓取不再被误判为重复） |
 | `dsh-command-context-trim` | ^0.1.1 | 命令上下文修剪(减少 token 消耗) |
 
 **web 模式 profile**（用户自建）首次启动自动安装:
