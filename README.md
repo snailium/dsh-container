@@ -142,6 +142,14 @@ docker run --rm --network host \
 > `file:` 依赖从镜像内 `/plugs/` vendor tgz 离线安装；非 `file:` 依赖走 npm registry。
 > headless 和 web 模式共用同一套逻辑。
 
+> **禁用内置 web search**：dsh-base 自带 `web-search-deepseek`（需要 DEEPSEEK_API_KEY）。
+> 本镜像使用 `dsh-web-search-pro` 替代，因此 headless 模板的 `cordis.patch.yml` 已将其禁用。
+> **web 模式自建 profile 时**，同样在 profile 目录下加 `cordis.patch.yml`：
+> ```yaml
+> - id: web-search-deepseek
+>   disabled: true
+> ```
+
 > **更新插件**：修改 `docker/plugs/` 中的 tgz 文件 + `package.json` 的 `file:` 路径，重新构建镜像即可。
 > dsh-relay 需本地构建后替换 `docker/plugs/dsh-relay-*.tgz`。
 

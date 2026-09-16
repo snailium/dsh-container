@@ -1,0 +1,4 @@
+# Profile patch layer (applied last, overrides all bundles).
+# Disable the built-in DeepSeek web search — we use dsh-web-search-pro instead.
+- id: web-search-deepseek
+  disabled: true
