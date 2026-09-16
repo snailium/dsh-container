@@ -2,9 +2,12 @@
     "name": "dsh-profile-headless",
     "private": true,
     "dependencies": {
-        "@anweat/dsh-browser": "0.1.12",
-        "dsh-web-search-pro": "0.1.12-alpha.4",
-        "dsh-repeat-tool-breaker": "0.1.3"
+        "@anweat/dsh-browser": "0.1.14-alpha.2",
+        "dsh-web-search-pro": "0.1.12-alpha.6",
+        "dsh-relay": "0.2.1",
+        "dsh-opencode-session": "0.1.1",
+        "dsh-repeat-tool-breaker": "^0.3.2",
+        "dsh-command-context-trim": "^0.1.1"
     },
     "dsh": {
         "profile": {
@@ -13,7 +16,10 @@
                 "@deepseek-ai/dsh-headless",
                 "@anweat/dsh-browser",
                 "dsh-web-search-pro",
-                "dsh-repeat-tool-breaker"
+                "dsh-relay",
+                "dsh-opencode-session",
+                "dsh-repeat-tool-breaker",
+                "dsh-command-context-trim"
             ],
             "patchReload": "startup"
         }

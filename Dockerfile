@@ -9,7 +9,7 @@
 #    node:22 镜像里安装, 全局包+bin+symlink 原位保留最稳。
 
 FROM node:22
-ARG DSH_VERSION=0.1.1-rc.2
+ARG DSH_VERSION=0.1.5-rc.2
 # DSH_LAN_IP 必须经 docker-compose 的 .env 显式提供(见 review S1: 不填则 fail-closed 拒绝启动)
 ENV NODE_ENV=production \
     DSH_VERSION=${DSH_VERSION} \
@@ -30,9 +30,12 @@ RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION}
 # headless 自动化测试: entrypoint 首次启动用 pnpm 安装测试 profile 插件。
 #   pnpm 在镜像构建期 `npm i -g pnpm` 装好(避免运行时 corepack 首次下载挂起)。
 #   插件从 npm registry 直接安装(官方兼容版已发布):
-#   - @anweat/dsh-browser@0.1.12
-#   - dsh-web-search-pro@0.1.12-alpha.4
-#   - dsh-repeat-tool-breaker@0.1.3
+#   - @anweat/dsh-browser@0.1.14-alpha.2
+#   - dsh-web-search-pro@0.1.12-alpha.6
+#   - dsh-relay@0.2.1
+#   - dsh-opencode-session@0.1.1
+#   - dsh-repeat-tool-breaker@^0.3.2
+#   - dsh-command-context-trim@^0.1.1
 RUN npm i -g pnpm
 
 # 工程内置代码层: TLS relay + entrypoint
