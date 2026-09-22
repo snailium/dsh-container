@@ -42,7 +42,7 @@ RUN mkdir -p /opt/dsh && cd /opt/dsh \
 #   - dsh-relay@0.2.1 (本地构建, 仅 web profile 使用; headless 不装——无 webServer 服务)
 #   - dsh-opencode-session@0.1.1
 #   - dsh-repeat-tool-breaker@0.4.2
-#   - dsh-command-context-trim@0.1.1
+#   - dsh-command-context-trim@0.2.0
 RUN npm i -g pnpm
 
 # 工程内置代码层: TLS relay + entrypoint
