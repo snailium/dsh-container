@@ -5,7 +5,7 @@
         "@anweat/dsh-browser": "file:/plugs/anweat-dsh-browser-0.1.14-alpha.2.tgz",
         "dsh-web-search-pro": "file:/plugs/dsh-web-search-pro-0.1.12-alpha.6.tgz",
         "dsh-opencode-session": "file:/plugs/dsh-opencode-session-0.1.1.tgz",
-        "dsh-repeat-tool-breaker": "file:/plugs/dsh-repeat-tool-breaker-0.3.3.tgz",
+        "dsh-repeat-tool-breaker": "file:/plugs/dsh-repeat-tool-breaker-0.4.0.tgz",
         "dsh-command-context-trim": "file:/plugs/dsh-command-context-trim-0.1.1.tgz"
     },
     "dsh": {
