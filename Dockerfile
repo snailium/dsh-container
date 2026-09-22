@@ -34,7 +34,7 @@ RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION}
 #   - dsh-web-search-pro@0.1.12-alpha.6
 #   - dsh-relay@0.2.1 (本地构建, 仅 web profile 使用; headless 不装——无 webServer 服务)
 #   - dsh-opencode-session@0.1.1
-#   - dsh-repeat-tool-breaker@0.4.0
+#   - dsh-repeat-tool-breaker@0.4.1
 #   - dsh-command-context-trim@0.1.1
 RUN npm i -g pnpm
 
