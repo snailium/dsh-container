@@ -25,7 +25,14 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # 唯一上游依赖: npm 包 (node:22 镜像锁定 node22, 永不踩 createZstdDecompress 坑)
-RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION}
+# 用 overrides pin dsh-web-app 到与 DSH_VERSION 同版本, 防止 caret range 拉到
+# 后续 rc 版本(可能依赖尚未发布的子包, 如 documentpreview@^rc.3 → ETARGET)。
+# npm i -g 不支持 overrides, 故走项目目录安装 + symlink。
+RUN mkdir -p /opt/dsh && cd /opt/dsh \
+  && printf '{"name":"dsh-global","version":"1.0.0","private":true,"dependencies":{"@deepseek-ai/dsh":"%s"},"overrides":{"@deepseek-ai/dsh-web-app":"%s"}}' "${DSH_VERSION}" "${DSH_VERSION}" > package.json \
+  && npm install --no-audit --no-fund \
+  && ln -sf /opt/dsh/node_modules/.bin/dsh /usr/local/bin/dsh \
+  && dsh --version
 
 # headless 自动化测试: entrypoint 首次启动用 pnpm 安装测试 profile 插件。
 #   pnpm 在镜像构建期 `npm i -g pnpm` 装好(避免运行时 corepack 首次下载挂起)。
