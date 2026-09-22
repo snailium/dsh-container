@@ -19,7 +19,7 @@ docker compose up -d     # 启动
 - **上游源 = 唯一 npm 包** `@deepseek-ai/dsh`(自包含, 无需 GitHub 源码/asset)
 - 版本经 build-arg 绑定 npm version, 由 CI 定时轮询 `dist-tags.latest` 自动重建:
   ```bash
-  docker build --build-arg DSH_VERSION=0.1.5-rc.2 .
+  docker build --build-arg DSH_VERSION=0.1.5-rc.3 .
   ```
 - 镜像 tag 直接用 npm 版本号 (如 `0.1.1-rc.2`, `latest`)
 - 发布到 repo-scoped `ghcr.io/snailium/dsh-container/dsh` (跟随仓库: 公开仓库→镜像公开; 也可 Web UI 单独改成 private)

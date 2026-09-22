@@ -9,7 +9,7 @@
 #    node:22 镜像里安装, 全局包+bin+symlink 原位保留最稳。
 
 FROM node:22
-ARG DSH_VERSION=0.1.5-rc.2
+ARG DSH_VERSION=0.1.5-rc.3
 # DSH_LAN_IP 必须经 docker-compose 的 .env 显式提供(见 review S1: 不填则 fail-closed 拒绝启动)
 ENV NODE_ENV=production \
     DSH_VERSION=${DSH_VERSION} \
