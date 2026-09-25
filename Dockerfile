@@ -19,9 +19,18 @@ ENV NODE_ENV=production \
     DSH_LAN_IP= \
     DSH_TRUSTED_AUTHORITY=
 
-# 健康检查 + TLS 工具
+# 健康检查 + TLS 工具 + 软件开发套件
+#   git            — VCS, npm/pnpm 原生依赖构建
+#   build-essential— gcc/g++/make (node-gyp 编译原生模块)
+#   python3        — node-gyp 构建脚本依赖
+#   ripgrep        — 高速全文搜索 (agent 工具链)
+#   jq             — JSON 处理 (API/日志调试)
+#   procps         — ps/top/free (进程与资源诊断)
+#   less/vim-tiny  — 文本查看/编辑
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl openssl \
+ && apt-get install -y --no-install-recommends \
+      curl openssl git build-essential python3 \
+      ripgrep jq procps less vim-tiny \
  && rm -rf /var/lib/apt/lists/*
 
 # 唯一上游依赖: npm 包 (node:22 镜像锁定 node22, 永不踩 createZstdDecompress 坑)
