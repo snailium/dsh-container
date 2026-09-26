@@ -100,7 +100,7 @@ mkdir -p /home/user/dsh-test-home
 docker run --rm --network host \
   -v /home/user/dsh-test-home:/dsh-home \
   -e DSH_MODE=headless -e DSH_TEST_PROFILE=headless_wsp \
-  -e DSH_HOME=/dsh-home -e <API_KEY_ENV>=<key> -e HOME=/root \
+  -e DSH_HOME=/dsh-home -e HOME=/root \
   <image> --patch /dsh-home/patch.yml "你的测试任务"
 # 首次启动: 自动 seed profile + pnpm 装插件 → 跑任务。之后复用卷每次跳过安装直接跑。
 # headless 不需要 DSH_LAN_IP(不做网络访问), 也不起 relay/TLS。
@@ -109,6 +109,26 @@ docker run --rm --network host \
 - `DSH_MODE=headless` + `DSH_TEST_PROFILE`(默认模板建于 `headless_wsp`) → entrypoint 自动确保 profile + 插件就绪后 `exec dsh --profile <p> <任务>`
 - 首次启动自动安装自带插件; 数据卷复用后跳过
 - `--patch` 覆盖默认模型/provider(或写 DSH_HOME/settings.yaml)
+
+### 🔑 凭据占位 (provider 加载必读)
+
+**dsh 的凭据层只检查 key「是否存在」, 不校验其真伪。** 未传入时 entrypoint 会补占位值,
+让 provider 路由能构建完成:
+
+| 环境变量 | 未传入时的占位值 | 说明 |
+|---|---|---|
+| `DEEPSEEK_API_KEY` | `test-dummy` | 内置 `deepseek-official` 路由 |
+| `B70_API_KEY` | `local-b70` | 本地 llama.cpp 端点 |
+| `OLLAMA_API_KEY` | `ollama-local` | 本地 Ollama 端点 |
+
+**显式传入的值 always 优先** —— 占位只在变量为空/未设时生效(`:-` 语义), 不会覆盖真实 key。
+
+> ⚠️ **排查提示**: 占位值让「忘记传 key」不再表现为 `MISSING_CREDENTIAL`, 而是表现得更靠后的:
+> - 内置官方路由 → `AUTH: ... api key ... is invalid`(请求真的发到了 DeepSeek 服务器)
+> - 自定义 provider → `TRANSPORT: Connection error`(本地端点不校验 key)
+>
+> 看到这两类错误时, 先确认是不是占位值在起作用。**想要保留清晰的 `MISSING_CREDENTIAL` 诊断,
+> 显式传空串** (`-e DEEPSEEK_API_KEY=`) 即可跳过占位。
 
 ### 自带插件 (vendor tgz 离线安装)
 

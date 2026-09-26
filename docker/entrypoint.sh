@@ -107,6 +107,10 @@ is_loopback() { # 检测 host 部分是否 loopback (含 IPv6 [::1] 方括号形
 if [ "$DSH_MODE" = "headless" ]; then
   export OLLAMA_API_KEY="${OLLAMA_API_KEY:-ollama-local}"
   export B70_API_KEY="${B70_API_KEY:-local-b70}"
+  # dsh 的凭据层只检查 key "是否存在", 不校验其真伪。headless 测试不访问云端,
+  # 故给一个占位值即可越过 MISSING_CREDENTIAL, 让 dsh 走完 provider 路由构建。
+  # (凭据层之后的失败才是真实诊断: 自定义 provider → TRANSPORT; 官方路由 → AUTH)
+  export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-test-dummy}"
   mkdir -p "$DSH_HOME"
   if [ -z "$DSH_TEST_PROFILE" ]; then
     echo "[entrypoint] ❌ DSH_MODE=headless 但未指定 DSH_TEST_PROFILE(要跑的 profile 名)。" >&2
@@ -158,6 +162,10 @@ fi
 # 默认 agent provider envs (llama.cpp/vLLM 端点不校验 key 值, 但 dsh 依此做凭据存在性检查)
 export OLLAMA_API_KEY="${OLLAMA_API_KEY:-ollama-local}"
 export B70_API_KEY="${B70_API_KEY:-local-b70}"
+# 同上: 未传入时给占位值, 越过 dsh 的凭据存在性检查(值真伪不影响该检查)。
+# 注意: 这让"忘记传 key"不再表现为 MISSING_CREDENTIAL, 而是更靠后的
+#       AUTH(官方路由) / TRANSPORT(自定义 provider) —— 若要保留清晰诊断, 显式传空串。
+export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-test-dummy}"
 
 mkdir -p "$DSH_HOME"
 
