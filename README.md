@@ -153,7 +153,7 @@ docker run --rm --network host \
 
 | 插件 | 版本 | 来源 | 作用 |
 |---|---|---|---|
-| `dsh-relay` | 0.2.1 | **本地构建** | DSH relay 插件(注入 webServer, TLS relay 前端) |
+| `dsh-relay` | 0.3.0 | **本地构建** | DSH relay 插件(注入 webServer, TLS relay 前端) |
 | `@anweat/dsh-browser` | 0.1.15-alpha.2 | npm pack (dsh 0.1.7-rc.2) | 浏览器服务 |
 | `dsh-web-search-pro` | 0.1.15-alpha.1 | npm pack | 多引擎 web 搜索工具 |
 
