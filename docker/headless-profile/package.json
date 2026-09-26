@@ -2,11 +2,11 @@
     "name": "dsh-profile-headless",
     "private": true,
     "dependencies": {
-        "@anweat/dsh-browser": "file:/plugs/anweat-dsh-browser-0.1.14-alpha.2.tgz",
-        "dsh-web-search-pro": "file:/plugs/dsh-web-search-pro-0.1.12-alpha.6.tgz",
+        "@anweat/dsh-browser": "file:/plugs/dsh-browser-0.1.15-alpha.2-dsh0.1.7-rc.2.tgz",
+        "dsh-web-search-pro": "file:/plugs/dsh-web-search-pro-0.1.15-alpha.1.tgz",
         "dsh-opencode-session": "file:/plugs/dsh-opencode-session-0.1.1.tgz",
-        "dsh-repeat-tool-breaker": "file:/plugs/dsh-repeat-tool-breaker-0.7.0.tgz",
-        "dsh-command-context-trim": "file:/plugs/dsh-command-context-trim-0.2.2.tgz"
+        "dsh-repeat-tool-breaker": "file:/plugs/dsh-repeat-tool-breaker-0.8.0.tgz",
+        "dsh-command-context-trim": "file:/plugs/dsh-command-context-trim-0.2.3.tgz"
     },
     "dsh": {
         "profile": {
