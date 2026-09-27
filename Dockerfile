@@ -48,17 +48,12 @@ RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION} --no-audit --no-fund
 #   - dsh-command-context-trim@0.3.0
 RUN npm i -g pnpm
 
-# 工程内置代码层: entrypoint + compaction 调优生成器
+# 工程内置代码层: TLS relay + entrypoint
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY docker/dsh-tls-relay.js /usr/local/bin/dsh-tls-relay.js
-# compaction 调优 overlay 生成器: 插件发布的 tgz 不含 scripts/(package.json#files
-# 只发 lib/docs/README), 故用镜像自带的这份, 只调用插件已发布的 lib/ 导出。
-COPY docker/make-tuned-overlay.mjs /usr/local/bin/make-tuned-overlay.mjs
 # 宿主 umask 077 时 COPY 会保留 600/700 权限 → node(非root) 读不了 relay 脚本(EACCES)。
-# 显式归一: entrypoint(root 执行, 可 750), relay/生成器(node 需可读, 644)。
-RUN chmod 750 /usr/local/bin/entrypoint.sh \
- && chmod 644 /usr/local/bin/dsh-tls-relay.js \
- && chmod 644 /usr/local/bin/make-tuned-overlay.mjs
+# 显式归一: entrypoint(root 执行, 可 750), relay(node 需可读, 644)。
+RUN chmod 750 /usr/local/bin/entrypoint.sh && chmod 644 /usr/local/bin/dsh-tls-relay.js
 
 # headless 自动化测试用的 profile 模板:
 #   entrypoint DSH_MODE=headless 首次启动会 seed 模板到数据卷, 然后 pnpm install

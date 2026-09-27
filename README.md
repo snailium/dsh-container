@@ -110,7 +110,7 @@ docker run --rm --network host \
 - 首次启动自动安装自带插件; 数据卷复用后跳过
 - `--patch` 覆盖默认模型/provider(或写 DSH_HOME/settings.yaml)
 
-### 🎛️ Compaction 自动调优 (headless)
+### 🎛️ Compaction 自动调优 (headless 默认开启)
 
 **问题**: dsh 的压缩触发点是
 
@@ -119,47 +119,34 @@ threshold = floor(min(W × ratio, (W − R) − headroom))
 ```
 
 `headroom` 默认 **65536**, 而它在 `W < ~370k` 时总是比 `W × ratio` 小 → `min()` 选中
-headroom 项, **实际触发点被压低**。实测 `W=131072, R=16384`:
+headroom 项, **触发点被压低**。实测 `W=131072, R=16384`:
 
 ```
 min(131072×0.8 = 104857, 49152) = 49152   →  37.5%   (期望 80%)
 ```
 
-**做法**: headless 启动前, entrypoint 自动生成一个 boot overlay 把
-`headroomTokens` 归零(让 ratio 说了算)并给出每路由 `modelPolicy`, 用 `--patch` 叠加。
-只改 `compaction-basic` 一行, 不动插件自身行为。**默认开启。**
+**做法**: `dsh-command-context-trim` 自带调优能力 —— 首次 idle 时读出各路由的**真实窗口**,
+把 `headroomTokens` 归零(让 ratio 说了算)并写入每路由 `modelPolicy`, 结果**持久化到
+profile 的 `cordis.patch.yml`**, 后续启动直接复用。entrypoint 在 headless 下默认设
+`DSH_TRIM_AUTO_TUNE=1` 开启(环境变量优先于 profile 配置)。
 
-```bash
-# 默认: 从 profile 的组合配置里读路由容量, 自动调优到 80%
-docker run ... -e DSH_MODE=headless -e DSH_TEST_PROFILE=headless_wsp <image> "任务"
-
-# 启动日志会确认:
-#   [entrypoint]   ✓ compaction 已调优 (ratio=0.8, 来源=profile dump)
-#   mock/mock-model: triggers at 80.0 % (~52428 tokens), retaining ~9830.
+```
+context-trim: auto compaction tune: Retuned compaction-basic (headroomTokens, maxTokens,
+modelPolicies, thresholdRatio). ... the value is persisted in the profile patch for later boots.
 ```
 
 | 环境变量 | 默认 | 说明 |
 |---|---|---|
-| `DSH_COMPACTION_AUTOTUNE` | `1` | `0` 关闭调优, 用 dsh 默认触发点 |
-| `DSH_COMPACTION_RATIO` | `0.8` | 目标触发比例(headroom 归零后由它决定) |
-| `DSH_COMPACTION_CONTEXT_WINDOW` | 空 | 兜底: profile 未声明后端时显式给窗口 |
-| `DSH_COMPACTION_MAX_TOKENS` | 空 | 兜底: 该路由的输出预留 |
-| `DSH_COMPACTION_MODEL` | 空 | 兜底: `provider:model` 绑定上面两个值 |
-| `DSH_COMPACTION_DEBUG` | `0` | `1` 时回显调优失败原因 |
+| `DSH_TRIM_AUTO_TUNE` | `1`(headless) | `0` 关闭。接受 `1/true/yes/on` 与 `0/false/no/off` |
 
-**窗口从哪来**(按优先级): ① profile 的组合 `--dump-config` 里有路由容量 → 自动读取;
-② 没有则用 `DSH_COMPACTION_CONTEXT_WINDOW`(+ `MAX_TOKENS`/`MODEL`)。
+> 目标比例等其余调优参数没有 env 入口, 只能走 profile 配置(插件 `config` 里的
+> `compactionTargetRatio`, 默认 `0.8`)。
 
-> ℹ️ **没有窗口来源时不调优**, 只打一行警告后照常跑任务。这是刻意的 —— 一个偷偷依赖
-> "假设窗口" 的阈值比不调优更糟。看到
-> `⚠ compaction 调优: 无可用窗口来源` 就说明该 profile 没声明后端路由。
+> ℹ️ **调优需要 profile 声明后端路由**(能读到 `contextWindow`/`maxTokens`)。没声明时
+> 插件跳过并说明原因 —— 这是刻意的: 一个偷偷依赖"假设窗口"的阈值比不调优更糟。
 
-> ⚠️ **调优只修正阈值, 不改模型能力**。压缩仍跑在会话自己的卡上, 冷 prefill 的耗时
-> 特性不变(见 `llm-session-routing` 关于 compaction 的 209–372s 实测)。
-
-实现说明: 插件发布的 tgz **不含 `scripts/`**(`package.json#files` 只发 `lib/docs/README`),
-所以镜像自带 `docker/make-tuned-overlay.mjs`, 只调用插件已发布的 `lib/` 导出
-(`resolveRouteInventory` / `planCompactionTuning` / `buildHostTunedPatch`)。
+> ⚠️ **调优只修正阈值, 不改模型能力**。压缩仍跑在会话自己的卡上, 冷 prefill 的耗时特性
+> 不变(见 `llm-session-routing` 的 209–372s 实测)。
 
 ### 🔑 凭据占位 (provider 加载必读)
 

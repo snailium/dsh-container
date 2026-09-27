@@ -19,19 +19,6 @@ DSH_MODE="${DSH_MODE:-web}"
 DSH_PLUGS_DIR="${DSH_PLUGS_DIR:-/plugs}"
 # headless 模式跑的 profile 名(首次启动若该 profile 缺插件, 会自动 seed + pnpm 安装)
 DSH_TEST_PROFILE="${DSH_TEST_PROFILE:-}"
-# --- compaction 自动调优 (headless) -----------------------------------------
-# 1=启动前生成 boot overlay 修正压缩触发点(见 tune_compaction_overlay); 0=用 dsh 默认。
-DSH_COMPACTION_AUTOTUNE="${DSH_COMPACTION_AUTOTUNE:-1}"
-# 目标触发比例。headroom 归零后 min() 由它决定, 对任意窗口都相对成立。
-DSH_COMPACTION_RATIO="${DSH_COMPACTION_RATIO:-0.8}"
-# 兜底窗口来源: profile 未声明后端时用这三个显式描述(都留空则跳过调优)。
-DSH_COMPACTION_CONTEXT_WINDOW="${DSH_COMPACTION_CONTEXT_WINDOW:-}"
-DSH_COMPACTION_MAX_TOKENS="${DSH_COMPACTION_MAX_TOKENS:-}"
-DSH_COMPACTION_MODEL="${DSH_COMPACTION_MODEL:-}"
-# 1=故意只调 ratio、不管窗口(仅当你清楚窗口不稳定时用)。
-DSH_COMPACTION_WINDOW_AGNOSTIC="${DSH_COMPACTION_WINDOW_AGNOSTIC:-0}"
-# 1=调优失败时回显生成器的完整诊断(默认关, 保持容器日志干净)。
-DSH_COMPACTION_DEBUG="${DSH_COMPACTION_DEBUG:-0}"
 # 必须显式提供 DSH_LAN_IP(relay 权威)。不提供则 fail-closed, 避免特权面暴露全网(见 review S1)
 DSH_LAN_IP="${DSH_LAN_IP:-}"
 # 受信权威默认绑定 web 端口(而非硬编码 3080)——改 DSH_WEB_PORT 时默认权威自动跟随(见 review P1)
@@ -96,70 +83,6 @@ except: pass" 2>/dev/null) || deps=""
 }
 
 # ---------------------------------------------------------------------------
-# 通用: compaction 自动调优 (dsh-command-context-trim 的 boot overlay, Route A)
-#
-#   为什么需要: dsh 的压缩触发点是
-#       threshold = floor(min(W * ratio, (W - R) - headroom))
-#   headroom 默认 65536, 而 headroom 项在 W < ~370k 时总是更小 → 实际触发点被
-#   压到 37.5% (实测 W=131072, R=16384: min(104857, 49152) = 49152 = 37.5%)。
-#   设 headroomTokens=0 后 min() 才真正由 ratio 决定, 且对每个窗口都相对成立。
-#
-#   做法: 插件自带的生成器从 --dump-config 读出每个路由的 contextWindow/maxTokens,
-#   算出顶层 ratio + 每路由 modelPolicy, 写一个 overlay 交给 dsh --patch。
-#   只改 compaction-basic 一行, 不碰插件自身行为。
-#
-#   $1=profile名  $2=overlay输出路径
-#   返回 0=已生成 (调用方应加 --patch), 1=未生成 (跳过, 用 dsh 默认)
-# ---------------------------------------------------------------------------
-tune_compaction_overlay() { # $1=profile $2=out
-  local profile="$1" out="$2"
-  local plug_dir="$DSH_HOME/profiles/$profile/node_modules/dsh-command-context-trim"
-  local gen="/usr/local/bin/make-tuned-overlay.mjs"
-  [ -d "$plug_dir/lib" ] || { log "  compaction 调优: 跳过 (profile 未装 dsh-command-context-trim)"; return 1; }
-  [ -f "$gen" ] || { log "  compaction 调优: 跳过 (镜像缺 $gen)"; return 1; }
-  command -v node >/dev/null 2>&1 || { log "  compaction 调优: 跳过 (无 node)"; return 1; }
-
-  # 先 dump 组合后的配置, 让生成器读真实的路由容量(而不是猜)。dump 失败不致命:
-  # 生成器还有 --context-window 兜底, 但需要 DSH_COMPACTION_CONTEXT_WINDOW 显式给出。
-  local dump="/tmp/dsh-dump-$$.yml" err="/tmp/dsh-tune-$$.log"
-  if runuser -u node -- env DSH_HOME="$DSH_HOME" HOME=/home/node \
-       dsh --profile "$profile" --dump-config >"$dump" 2>/dev/null && [ -s "$dump" ]; then
-    if runuser -u node -- node "$gen" --plugin "$plug_dir" \
-         --ratio "$DSH_COMPACTION_RATIO" --dump "$dump" --out "$out" 2>"$err"; then
-      log "  ✓ compaction 已调优 (ratio=$DSH_COMPACTION_RATIO, 来源=profile dump)"
-      sed 's/^/    /' "$err" >&2 || true
-      rm -f "$dump" "$err"; return 0
-    fi
-    # 生成器失败时会打印整段用法说明, 对容器日志太吵 —— 只在调试时才回显。
-    log "  ⚠ compaction 调优: profile dump 里没有可用的路由容量"
-    [ "${DSH_COMPACTION_DEBUG:-0}" = "1" ] && sed 's/^/    /' "$err" >&2
-  else
-    log "  ⚠ compaction 调优: --dump-config 失败"
-  fi
-  rm -f "$dump" "$err"
-
-  # 兜底: 显式给出窗口/预留时, 仍可生成 (profile 未声明后端的场景)
-  if [ -n "$DSH_COMPACTION_CONTEXT_WINDOW" ]; then
-    local extra=()
-    [ -n "$DSH_COMPACTION_MAX_TOKENS" ] && extra+=(--max-tokens "$DSH_COMPACTION_MAX_TOKENS")
-    [ -n "$DSH_COMPACTION_MODEL" ] && extra+=(--model "$DSH_COMPACTION_MODEL")
-    if runuser -u node -- node "$gen" --plugin "$plug_dir" \
-         --ratio "$DSH_COMPACTION_RATIO" \
-         --context-window "$DSH_COMPACTION_CONTEXT_WINDOW" "${extra[@]}" \
-         --out "$out" 2>/dev/null; then
-      log "  ✓ compaction 已调优 (ratio=$DSH_COMPACTION_RATIO, 来源=显式 context-window)"
-      return 0
-    fi
-    log "  ⚠ compaction 调优: 显式 context-window 也生成失败"
-    return 1
-  fi
-
-  log "  ⚠ compaction 调优: 无可用窗口来源, 保持 dsh 默认 (触发点会被 65536 headroom 压低)"
-  log "    想启用请给 DSH_COMPACTION_CONTEXT_WINDOW, 或让 profile 声明后端路由"
-  return 1
-}
-
-# ---------------------------------------------------------------------------
 # FAIL-CLOSED 启动校验 (review S1):
 #   relay 绑 0.0.0.0(全网) + host 网络时, DSH_TRUSTED_AUTHORITY 若解析为 loopback,
 #   dsh 的 loopback-only 特权方法(fence)会对全网放行 → 特权面暴露。
@@ -188,6 +111,11 @@ if [ "$DSH_MODE" = "headless" ]; then
   # 故给一个占位值即可越过 MISSING_CREDENTIAL, 让 dsh 走完 provider 路由构建。
   # (凭据层之后的失败才是真实诊断: 自定义 provider → TRANSPORT; 官方路由 → AUTH)
   export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-test-dummy}"
+  # compaction 自动调优: dsh-command-context-trim 自带的能力 —— 首次 idle 时读出各路由的
+  # 真实窗口, 把 headroomTokens 归零(否则 dsh 默认的 65536 会把触发点从 80% 压到 37.5%),
+  # 并把结果写回 profile 的 cordis.patch.yml, 后续启动直接复用。
+  # 环境变量优先于 profile 配置, 故这里设一次即可, 不必改每个 profile。
+  export DSH_TRIM_AUTO_TUNE="${DSH_TRIM_AUTO_TUNE:-1}"
   mkdir -p "$DSH_HOME"
   if [ -z "$DSH_TEST_PROFILE" ]; then
     echo "[entrypoint] ❌ DSH_MODE=headless 但未指定 DSH_TEST_PROFILE(要跑的 profile 名)。" >&2
@@ -215,17 +143,8 @@ if [ "$DSH_MODE" = "headless" ]; then
   # 检查 + 安装插件依赖(通用函数)
   ensure_profile_plugins "$PROFILE_DIR" || true
   log "headless: exec dsh --profile '$DSH_TEST_PROFILE' $*"
-  # compaction 自动调优 (Route A): 启动前生成 overlay, 用 --patch 叠加。
-  # 生成失败不影响任务执行(退回 dsh 默认触发点), 只丢调优收益。
-  TUNED_PATCH=()
-  if [ "$DSH_COMPACTION_AUTOTUNE" = "1" ]; then
-    TUNE_OUT="/tmp/dsh-compaction-tuned-$$.yml"
-    if tune_compaction_overlay "$DSH_TEST_PROFILE" "$TUNE_OUT"; then
-      TUNED_PATCH=(--patch "$TUNE_OUT")
-    fi
-  fi
   exec runuser -u node -- env DSH_HOME="$DSH_HOME" HOME=/home/node \
-    dsh --profile "$DSH_TEST_PROFILE" "${TUNED_PATCH[@]}" "$@"
+    dsh --profile "$DSH_TEST_PROFILE" "$@"
 fi
 
 if [ -z "$DSH_LAN_IP" ]; then
