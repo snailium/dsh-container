@@ -180,7 +180,7 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 | `@anweat/dsh-browser` | 0.1.15 | npm 官方发布 | 浏览器服务(web-search-pro 的必需依赖) |
 | `dsh-web-search-pro` | 0.1.15 | npm 官方发布 | 多引擎 web 搜索工具 |
 | `dsh-opencode-session` | 0.1.1 | npm pack | OpenCode 会话集成 |
-| `dsh-repeat-tool-breaker` | 0.8.1 | npm 官方发布 | 重复工具调用防护(语义指纹+滑动窗口) |
+| `dsh-repeat-tool-breaker` | 0.8.2 | npm 官方发布 | 重复工具调用防护(语义指纹+滑动窗口) |
 | `dsh-command-context-trim` | 0.3.2 | npm 官方发布 | 命令上下文修剪(减少 token 消耗) |
 
 > ⚠️ **headless 不装 dsh-relay**：dsh-relay 需要 `webServer` 服务（由 `dsh web` 提供），
