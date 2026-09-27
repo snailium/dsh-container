@@ -45,7 +45,7 @@ RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION} --no-audit --no-fund
 #   - dsh-relay@0.3.0 (本地构建, 仅 web profile 使用; headless 不装——无 webServer 服务)
 #   - dsh-opencode-session@0.1.1
 #   - dsh-repeat-tool-breaker@0.8.0
-#   - dsh-command-context-trim@0.3.0
+#   - dsh-command-context-trim@0.3.2
 RUN npm i -g pnpm
 
 # 工程内置代码层: TLS relay + entrypoint

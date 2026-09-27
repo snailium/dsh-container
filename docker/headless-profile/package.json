@@ -6,7 +6,7 @@
         "dsh-web-search-pro": "file:/plugs/dsh-web-search-pro-0.1.15-alpha.1.tgz",
         "dsh-opencode-session": "file:/plugs/dsh-opencode-session-0.1.1.tgz",
         "dsh-repeat-tool-breaker": "file:/plugs/dsh-repeat-tool-breaker-0.8.0.tgz",
-        "dsh-command-context-trim": "file:/plugs/dsh-command-context-trim-0.3.0.tgz"
+        "dsh-command-context-trim": "file:/plugs/dsh-command-context-trim-0.3.2.tgz"
     },
     "dsh": {
         "profile": {
