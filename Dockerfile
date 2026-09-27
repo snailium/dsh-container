@@ -40,8 +40,8 @@ RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION} --no-audit --no-fund
 # headless 自动化测试: entrypoint 首次启动用 pnpm 安装测试 profile 插件。
 #   pnpm 在镜像构建期 `npm i -g pnpm` 装好(避免运行时 corepack 首次下载挂起)。
 #   插件以 vendor tgz 形式烘焙进镜像 /plugs/, 离线安装(不依赖运行时网络):
-#   - @anweat/dsh-browser@0.1.15-alpha.2 (dsh 0.1.7-rc.2 构建)
-#   - dsh-web-search-pro@0.1.15-alpha.1
+#   - @anweat/dsh-browser@0.1.15 (官方发布, 精确适配 dsh 0.1.7-rc.2)
+#   - dsh-web-search-pro@0.1.15 (官方发布; peer 精确要求 browser 0.1.15, 两者必须同升)
 #   - dsh-relay@0.3.0 (本地构建, 仅 web profile 使用; headless 不装——无 webServer 服务)
 #   - dsh-opencode-session@0.1.1
 #   - dsh-repeat-tool-breaker@0.8.0

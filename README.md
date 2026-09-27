@@ -177,8 +177,8 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 
 | 插件 | 版本 | 来源 | 作用 |
 |---|---|---|---|
-| `@anweat/dsh-browser` | 0.1.15-alpha.2 | npm pack (dsh 0.1.7-rc.2) | 浏览器服务(web-search-pro 的必需依赖) |
-| `dsh-web-search-pro` | 0.1.15-alpha.1 | npm pack | 多引擎 web 搜索工具 |
+| `@anweat/dsh-browser` | 0.1.15 | npm 官方发布 | 浏览器服务(web-search-pro 的必需依赖) |
+| `dsh-web-search-pro` | 0.1.15 | npm 官方发布 | 多引擎 web 搜索工具 |
 | `dsh-opencode-session` | 0.1.1 | npm pack | OpenCode 会话集成 |
 | `dsh-repeat-tool-breaker` | 0.8.0 | npm pack | 重复工具调用防护(语义指纹+滑动窗口) |
 | `dsh-command-context-trim` | 0.3.2 | npm pack | 命令上下文修剪(减少 token 消耗) |
@@ -192,8 +192,8 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 | 插件 | 版本 | 来源 | 作用 |
 |---|---|---|---|
 | `dsh-relay` | 0.3.0 | **本地构建** | DSH relay 插件(注入 webServer, TLS relay 前端) |
-| `@anweat/dsh-browser` | 0.1.15-alpha.2 | npm pack (dsh 0.1.7-rc.2) | 浏览器服务 |
-| `dsh-web-search-pro` | 0.1.15-alpha.1 | npm pack | 多引擎 web 搜索工具 |
+| `@anweat/dsh-browser` | 0.1.15 | npm 官方发布 | 浏览器服务 |
+| `dsh-web-search-pro` | 0.1.15 | npm 官方发布 | 多引擎 web 搜索工具 |
 
 > **自动安装机制**：entrypoint 启动时扫描 `$DSH_HOME/profiles/` 下所有含 `package.json` 的 profile，
 > 从 dependencies 提取包名（排除 `@deepseek-ai/dsh-*` 框架包），缺则自动 `pnpm install`。
