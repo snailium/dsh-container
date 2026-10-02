@@ -179,9 +179,9 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 |---|---|---|---|
 | `@anweat/dsh-browser` | 0.1.15 | npm 官方发布 | 浏览器服务(web-search-pro 的必需依赖) |
 | `dsh-web-search-pro` | 0.1.15 | npm 官方发布 | 多引擎 web 搜索工具 |
-| `dsh-opencode-session` | 0.1.1 | npm pack | OpenCode 会话集成 |
-| `dsh-repeat-tool-breaker` | 0.8.2 | npm 官方发布 | 重复工具调用防护(语义指纹+滑动窗口) |
-| `dsh-command-context-trim` | 0.3.6 | npm 官方发布 | 命令上下文修剪(减少 token 消耗) |
+| `dsh-repeat-tool-breaker` | 0.8.7 | npm 官方发布 | 重复工具调用防护(语义指纹+滑动窗口; 修 shell-HTTP 误拦) |
+| `dsh-command-context-trim` | 0.6.5 | npm 官方发布 | 命令上下文修剪 + compaction 调优(两行独立开关) |
+| `dsh-llm-session-header` | 0.4.0 | npm 官方发布 | 按会话注入稳定路由头(x-opencode-session / X-SMG-Routing-Key) |
 
 > **容器自带的 TLS relay 与 `dsh-relay` 插件是两回事**：容器用的是自己那份独立脚本
 > （`dsh-tls-relay.js`），由 entrypoint 直接启动，**不依赖也不安装** `dsh-relay` 插件。
@@ -194,6 +194,11 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 |---|---|---|---|
 | `@anweat/dsh-browser` | 0.1.15 | npm 官方发布 | 浏览器服务 |
 | `dsh-web-search-pro` | 0.1.15 | npm 官方发布 | 多引擎 web 搜索工具 |
+| `dsh-mobile` | 0.5.3 | npm 官方发布 | 手机访问 harness(webServer 网关; **headless 不可用**, 无 webServer 会启动崩溃) |
+
+> ⚠️ **dsh-mobile 是 web 模式专用**：它的 bundle 注入 `webServer` + `connection`，
+> headless CLI 模式没有这两个服务 → 激活失败 → 启动崩溃。tgz 已烘焙进 `/plugs/`，
+> 自建 web profile 时加一行依赖即可离线安装；headless 模板不装它。
 
 > **自动安装机制**：entrypoint 启动时扫描 `$DSH_HOME/profiles/` 下所有含 `package.json` 的 profile，
 > 从 dependencies 提取包名（排除 `@deepseek-ai/dsh-*` 框架包），缺则自动 `pnpm install`。

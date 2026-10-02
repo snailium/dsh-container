@@ -42,9 +42,11 @@ RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION} --no-audit --no-fund
 #   插件以 vendor tgz 形式烘焙进镜像 /plugs/, 离线安装(不依赖运行时网络):
 #   - @anweat/dsh-browser@0.1.15 (官方发布, 精确适配 dsh 0.1.7-rc.2)
 #   - dsh-web-search-pro@0.1.15 (官方发布; peer 精确要求 browser 0.1.15, 两者必须同升)
-#   - dsh-opencode-session@0.1.1
-#   - dsh-repeat-tool-breaker@0.8.2 (官方发布; 修 shell-HTTP 误拦: 本地端点/仅 import/短 httpie 名)
-#   - dsh-command-context-trim@0.3.6 (官方发布; 新增 DSH_TRIM_PRUNER / DSH_TRIM_TUNE_STOCK_DISABLED, 卡片暴露 tuner 三开关)
+#   - dsh-repeat-tool-breaker@0.8.7 (官方发布; 修 shell-HTTP 误拦: 请求体内 URL/变量目标不再误判为远程)
+#   - dsh-command-context-trim@0.6.5 (官方发布; 拆成 context-trim + context-tuning 两行, 各自独立开关与卡片)
+#   - dsh-llm-session-header@0.4.0 (官方发布; 按会话注入稳定路由头: x-opencode-session / X-SMG-Routing-Key)
+#   - dsh-mobile@0.5.3 (官方发布; 手机访问 webServer, 仅 web 模式自建 profile 使用——headless 不装,
+#     无 webServer 服务会启动崩溃。tgz 含预编译 funnel 二进制, ~26MB)
 RUN npm i -g pnpm
 
 # 工程内置代码层: TLS relay + entrypoint

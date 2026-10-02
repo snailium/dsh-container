@@ -4,9 +4,9 @@
     "dependencies": {
         "@anweat/dsh-browser": "file:/plugs/dsh-browser-0.1.15.tgz",
         "dsh-web-search-pro": "file:/plugs/dsh-web-search-pro-0.1.15.tgz",
-        "dsh-opencode-session": "file:/plugs/dsh-opencode-session-0.1.1.tgz",
-        "dsh-repeat-tool-breaker": "file:/plugs/dsh-repeat-tool-breaker-0.8.2.tgz",
-        "dsh-command-context-trim": "file:/plugs/dsh-command-context-trim-0.3.6.tgz"
+        "dsh-repeat-tool-breaker": "file:/plugs/dsh-repeat-tool-breaker-0.8.7.tgz",
+        "dsh-command-context-trim": "file:/plugs/dsh-command-context-trim-0.6.5.tgz",
+        "dsh-llm-session-header": "file:/plugs/dsh-llm-session-header-0.4.0.tgz"
     },
     "dsh": {
         "profile": {
@@ -15,9 +15,9 @@
                 "@deepseek-ai/dsh-headless",
                 "@anweat/dsh-browser",
                 "dsh-web-search-pro",
-                "dsh-opencode-session",
                 "dsh-repeat-tool-breaker",
-                "dsh-command-context-trim"
+                "dsh-command-context-trim",
+                "dsh-llm-session-header"
             ],
             "patchReload": "startup"
         }
