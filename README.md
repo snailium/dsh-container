@@ -171,7 +171,7 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 ### 自带插件 (vendor tgz 离线安装)
 
 插件以 vendor tgz 形式烘焙进镜像 `/plugs/`，运行时离线安装（不依赖网络）。
-`dsh-relay` 为本地构建版；其余从 npm registry pack 而来。
+全部来自 npm registry pack（官方发布），构建期不再需要本地打包。
 
 **headless 测试 profile**（模板: `docker/headless-profile/`）首次启动自动安装:
 
@@ -183,15 +183,15 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 | `dsh-repeat-tool-breaker` | 0.8.2 | npm 官方发布 | 重复工具调用防护(语义指纹+滑动窗口) |
 | `dsh-command-context-trim` | 0.3.6 | npm 官方发布 | 命令上下文修剪(减少 token 消耗) |
 
-> ⚠️ **headless 不装 dsh-relay**：dsh-relay 需要 `webServer` 服务（由 `dsh web` 提供），
-> headless CLI 模式无此服务 → bundle 激活失败 → 启动崩溃。
-> 容器自身的 TLS relay 是独立的 Node.js 脚本（`dsh-tls-relay.js`），不依赖 dsh-relay 插件。
+> **容器自带的 TLS relay 与 `dsh-relay` 插件是两回事**：容器用的是自己那份独立脚本
+> （`dsh-tls-relay.js`），由 entrypoint 直接启动，**不依赖也不安装** `dsh-relay` 插件。
+> 该插件需要 `webServer` 服务做注入点，且本仓库已不再内置它——如需在自建 web profile
+> 里使用，请自行从 npm 安装。
 
 **web 模式 profile**（用户自建）首次启动自动安装:
 
 | 插件 | 版本 | 来源 | 作用 |
 |---|---|---|---|
-| `dsh-relay` | 0.3.0 | **本地构建** | DSH relay 插件(注入 webServer, TLS relay 前端) |
 | `@anweat/dsh-browser` | 0.1.15 | npm 官方发布 | 浏览器服务 |
 | `dsh-web-search-pro` | 0.1.15 | npm 官方发布 | 多引擎 web 搜索工具 |
 
@@ -209,7 +209,7 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 > ```
 
 > **更新插件**：修改 `docker/plugs/` 中的 tgz 文件 + `package.json` 的 `file:` 路径，重新构建镜像即可。
-> dsh-relay 需本地构建后替换 `docker/plugs/dsh-relay-*.tgz`。
+> tgz 用 `npm pack <pkg>@<version>` 从 registry 取（离线安装用 `--offline` 或先缓存）。
 
 ## 🔄 升级
 

@@ -250,8 +250,9 @@ log "运行数据所有权检查完成 (仅接管 root 属主的遗留产物, �
 
 # ---------------------------------------------------------------------------
 # 1.5) Web 模式: 扫描所有 profile, 自动补装缺失的插件依赖
-#   用户自建的 profile(如含 dsh-relay/dsh-browser/web-search-pro)首次启动时
+#   用户自建的 profile(如含 dsh-browser/web-search-pro)首次启动时
 #   node_modules 不存在 → 自动 pnpm install。之后复用卷跳过。
+#   注意: 只对能在镜像 /plugs/ 里找到的 file: 依赖离线可用; 其余走 registry。
 # ---------------------------------------------------------------------------
 if [ -d "$DSH_HOME/profiles" ]; then
   for pf in "$DSH_HOME/profiles"/*/; do

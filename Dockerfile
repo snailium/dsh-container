@@ -42,7 +42,6 @@ RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION} --no-audit --no-fund
 #   插件以 vendor tgz 形式烘焙进镜像 /plugs/, 离线安装(不依赖运行时网络):
 #   - @anweat/dsh-browser@0.1.15 (官方发布, 精确适配 dsh 0.1.7-rc.2)
 #   - dsh-web-search-pro@0.1.15 (官方发布; peer 精确要求 browser 0.1.15, 两者必须同升)
-#   - dsh-relay@0.3.0 (本地构建, 仅 web profile 使用; headless 不装——无 webServer 服务)
 #   - dsh-opencode-session@0.1.1
 #   - dsh-repeat-tool-breaker@0.8.2 (官方发布; 修 shell-HTTP 误拦: 本地端点/仅 import/短 httpie 名)
 #   - dsh-command-context-trim@0.3.6 (官方发布; 新增 DSH_TRIM_PRUNER / DSH_TRIM_TUNE_STOCK_DISABLED, 卡片暴露 tuner 三开关)
@@ -61,7 +60,7 @@ RUN chmod 750 /usr/local/bin/entrypoint.sh && chmod 644 /usr/local/bin/dsh-tls-r
 COPY docker/headless-profile/ /opt/dsh-headless-profile/
 
 # vendor 插件 tgz 包(烘焙进镜像, 运行时离线安装, 不依赖网络):
-#   dsh-relay 为本地构建版; 其余从 npm registry pack 而来。
+#   全部来自 npm registry pack(官方发布), 构建期不再需要本地打包。
 COPY docker/plugs/ /plugs/
 
 # 安全: dsh/relay 工作进程以非 root(node/uid1000) 运行。
