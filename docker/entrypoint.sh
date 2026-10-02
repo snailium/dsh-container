@@ -24,6 +24,14 @@ DSH_LAN_IP="${DSH_LAN_IP:-}"
 # 受信权威默认绑定 web 端口(而非硬编码 3080)——改 DSH_WEB_PORT 时默认权威自动跟随(见 review P1)
 DSH_TRUSTED_AUTHORITY="${DSH_TRUSTED_AUTHORITY:-${DSH_LAN_IP}:${DSH_WEB_PORT}}"
 
+# dsh-command-context-trim 容器级默认(环境变量优先于 profile 配置, 见插件 lib/config.js)。
+#   DSH_TRIM_AUTO_TUNE=true  首次 idle 时按各路由真实窗口自动调优 compaction, 结果持久化到 profile patch。
+#   DSH_TRIM_PRUNER=auto     工具结果 pruner 阈值按路由推导(max(8192, min(32768, (window-maxTokens)×2))),
+#                            而非 dsh stock 的固定 8192——小窗口下避免整文件读被剪成头尾。
+#   两者都可用同名 env 覆盖; 这里只是给一个开箱即用的默认。
+export DSH_TRIM_AUTO_TUNE="${DSH_TRIM_AUTO_TUNE:-true}"
+export DSH_TRIM_PRUNER="${DSH_TRIM_PRUNER:-auto}"
+
 log()  { echo "[entrypoint] $*"; }   # 定义在最先, 供下方 S1 校验使用
 
 # ---------------------------------------------------------------------------
@@ -111,11 +119,8 @@ if [ "$DSH_MODE" = "headless" ]; then
   # 故给一个占位值即可越过 MISSING_CREDENTIAL, 让 dsh 走完 provider 路由构建。
   # (凭据层之后的失败才是真实诊断: 自定义 provider → TRANSPORT; 官方路由 → AUTH)
   export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-test-dummy}"
-  # compaction 自动调优: dsh-command-context-trim 自带的能力 —— 首次 idle 时读出各路由的
-  # 真实窗口, 把 headroomTokens 归零(否则 dsh 默认的 65536 会把触发点从 80% 压到 37.5%),
-  # 并把结果写回 profile 的 cordis.patch.yml, 后续启动直接复用。
-  # 环境变量优先于 profile 配置, 故这里设一次即可, 不必改每个 profile。
-  export DSH_TRIM_AUTO_TUNE="${DSH_TRIM_AUTO_TUNE:-1}"
+  # compaction 自动调优: DSH_TRIM_AUTO_TUNE 已在 entrypoint 顶部统一设默认(true),
+  # headless/web 共用, 环境变量优先于 profile 配置。
   mkdir -p "$DSH_HOME"
   if [ -z "$DSH_TEST_PROFILE" ]; then
     echo "[entrypoint] ❌ DSH_MODE=headless 但未指定 DSH_TEST_PROFILE(要跑的 profile 名)。" >&2

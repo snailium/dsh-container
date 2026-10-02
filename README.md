@@ -127,8 +127,8 @@ min(131072×0.8 = 104857, 49152) = 49152   →  37.5%   (期望 80%)
 
 **做法**: `dsh-command-context-trim` 自带调优能力 —— 首次 idle 时读出各路由的**真实窗口**,
 把 `headroomTokens` 归零(让 ratio 说了算)并写入每路由 `modelPolicy`, 结果**持久化到
-profile 的 `cordis.patch.yml`**, 后续启动直接复用。entrypoint 在 headless 下默认设
-`DSH_TRIM_AUTO_TUNE=1` 开启(环境变量优先于 profile 配置)。
+profile 的 `cordis.patch.yml`**, 后续启动直接复用。entrypoint 在容器级默认设
+`DSH_TRIM_AUTO_TUNE=true`(headless/web 共用, 环境变量优先于 profile 配置)。
 
 ```
 context-trim: auto compaction tune: Retuned compaction-basic (headroomTokens, maxTokens,
@@ -137,7 +137,8 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 
 | 环境变量 | 默认 | 说明 |
 |---|---|---|
-| `DSH_TRIM_AUTO_TUNE` | `1`(headless) | `0` 关闭。接受 `1/true/yes/on` 与 `0/false/no/off` |
+| `DSH_TRIM_AUTO_TUNE` | `true`(容器级) | `0` 关闭。接受 `1/true/yes/on` 与 `0/false/no/off`。entrypoint 顶部统一设默认, headless/web 共用 |
+| `DSH_TRIM_PRUNER` | `auto`(容器级) | 工具结果 pruner 阈值: `auto`=按路由推导(`max(8192, min(32768, (window−maxTokens)×2))`), `0`=不动 dsh stock pruner, 正整数=固定字符数。小窗口下避免整文件读被剪成头尾 |
 
 > 目标比例等其余调优参数没有 env 入口, 只能走 profile 配置(插件 `config` 里的
 > `compactionTargetRatio`, 默认 `0.8`)。
