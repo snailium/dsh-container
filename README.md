@@ -19,7 +19,7 @@ docker compose up -d     # 启动
 - **上游源 = 唯一 npm 包** `@deepseek-ai/dsh`(自包含, 无需 GitHub 源码/asset)
 - 版本经 build-arg 绑定 npm version, 由 CI 定时轮询 `dist-tags.latest` 自动重建:
   ```bash
-  docker build --build-arg DSH_VERSION=0.1.7-rc.2 .
+  docker build --build-arg DSH_VERSION=0.2.0-rc.2 .
   ```
 - 镜像 tag 直接用 npm 版本号 (如 `0.1.1-rc.2`, `latest`)
 - 发布到 repo-scoped `ghcr.io/snailium/dsh-container/dsh` (跟随仓库: 公开仓库→镜像公开; 也可 Web UI 单独改成 private)
@@ -178,8 +178,8 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 
 | 插件 | 版本 | 来源 | 作用 |
 |---|---|---|---|
-| `@anweat/dsh-browser` | 0.1.15 | npm 官方发布 | 浏览器服务(web-search-pro 的必需依赖) |
-| `dsh-web-search-pro` | 0.1.15 | npm 官方发布 | 多引擎 web 搜索工具 |
+| `@anweat/dsh-browser` | 0.2.0-rc.1 | npm 官方发布 | 浏览器服务(web-search-pro 的必需依赖) |
+| `dsh-web-search-pro` | 0.1.16-alpha.1 | 本地构建 | 多引擎 web 搜索工具(peer 范围兼容 dsh 0.2.x) |
 | `dsh-repeat-tool-breaker` | 0.8.7 | npm 官方发布 | 重复工具调用防护(语义指纹+滑动窗口; 修 shell-HTTP 误拦) |
 | `dsh-command-context-trim` | 0.6.6 | npm 官方发布 | 命令上下文修剪 + compaction 调优(小窗口也自动调优) |
 | `dsh-llm-session-header` | 0.4.0 | npm 官方发布 | 按会话注入稳定路由头(x-opencode-session / X-SMG-Routing-Key) |

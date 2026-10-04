@@ -9,7 +9,7 @@
 #    node:22 镜像里安装, 全局包+bin+symlink 原位保留最稳。
 
 FROM node:22
-ARG DSH_VERSION=0.1.7-rc.2
+ARG DSH_VERSION=0.2.0-rc.2
 # DSH_LAN_IP 必须经 docker-compose 的 .env 显式提供(见 review S1: 不填则 fail-closed 拒绝启动)
 ENV NODE_ENV=production \
     DSH_VERSION=${DSH_VERSION} \
@@ -40,8 +40,8 @@ RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION} --no-audit --no-fund
 # headless 自动化测试: entrypoint 首次启动用 pnpm 安装测试 profile 插件。
 #   pnpm 在镜像构建期 `npm i -g pnpm` 装好(避免运行时 corepack 首次下载挂起)。
 #   插件以 vendor tgz 形式烘焙进镜像 /plugs/, 离线安装(不依赖运行时网络):
-#   - @anweat/dsh-browser@0.1.15 (官方发布, 精确适配 dsh 0.1.7-rc.2)
-#   - dsh-web-search-pro@0.1.15 (官方发布; peer 精确要求 browser 0.1.15, 两者必须同升)
+#   - @anweat/dsh-browser@0.2.0-rc.1 (官方发布, 适配 dsh 0.1.7-rc.2 / 0.2.0-rc.x)
+#   - dsh-web-search-pro@0.1.16-alpha.1 (本地构建; peer 范围 >=0.1.8 <0.2.0 browser, >=0.1.7-rc.2 <0.2.1-0 dsh)
 #   - dsh-repeat-tool-breaker@0.8.7 (官方发布; 修 shell-HTTP 误拦: 请求体内 URL/变量目标不再误判为远程)
 #   - dsh-command-context-trim@0.6.6 (官方发布; 小窗口路由也自动调优, 移除 tuneStockDisabledRoutes)
 #   - dsh-llm-session-header@0.4.0 (官方发布; 按会话注入稳定路由头: x-opencode-session / X-SMG-Routing-Key)
