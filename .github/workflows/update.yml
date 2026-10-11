@@ -1,18 +1,24 @@
 name: Auto-update dsh image
 
-# dsh 版本由 Dockerfile DSH_VERSION 决定(手动 bump), CI 读取该值作为镜像 tag。
-# schedule / workflow_dispatch 触发重建 + 冒烟验证 + 推 ghcr; push 只跑测试不推镜像。
+# 单一 job 负责: 构建 → 单测 → 冒烟 → 推送镜像。三个触发源共用:
+#   push 到 master    → 代码改动必须产出新镜像(代码即镜像)
+#   schedule          → 版本文件被 bump 时补齐构建(该 revision 已构建则快速跳过)
+#   workflow_dispatch → 手动, force=true 强制重建
+#
+# 镜像 tag 携带源码短 SHA(如 0.2.0-rc.2-abc123def456), 因此"代码变了但版本号没变"
+# 也会产生唯一 tag 并正常构建 —— 此前 tag 只有版本号, schedule 会因 tag 已存在而跳过,
+# 导致 entrypoint/relay/smoke 的修复永远进不了镜像(见 review v7 镜像未重建事故)。
 on:
   schedule:
     - cron: "0 */6 * * *"   # 每6小时
   workflow_dispatch:        # 手动触发
     inputs:
       force:
-        description: '强制重建并推送(即使版本已存在)'
+        description: '强制重建并推送(即使该 revision 已存在)'
         required: false
         type: boolean
         default: false
-  push:                     # push 到 master 时跑测试(不推镜像, 见 push-test job)
+  push:                     # push 到 master: 构建+测试+推送
     branches: [master]
 
 # GITHUB_TOKEN 对当前仓库的 repo-scoped 容器包有 packages:write(推镜像)
@@ -27,8 +33,6 @@ env:
 
 jobs:
   check-and-build:
-    # 仅 schedule / workflow_dispatch 触发(不会因 push 跑)；push 走 push-test job
-    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     steps:
       - name: 检出源码(含 Dockerfile/entrypoint/relay/test)
@@ -37,85 +41,7 @@ jobs:
       - name: 查上游 dsh 版本 (仓库 DSH_VERSION 文件)
         id: npm
         run: |
-          # 权威来源 = 仓库根 DSH_VERSION 文件(非 Dockerfile: ARG 已无默认值)
-          V=$(grep -vE "^[[:space:]]*(#|$)" DSH_VERSION | head -1 | tr -d "[:space:]")
-          if [ -z "$V" ]; then
-            echo "❌ DSH_VERSION 文件为空/无法解析 —— 版本必须显式指定, 不接受空的默认值" >&2
-            exit 1
-          fi
-          echo "latest=$V" >> "$GITHUB_OUTPUT"
-          echo "upstream dsh version (from DSH_VERSION file): $V"
-
-      - name: 登录 ghcr
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: 检查是否已有该版本镜像
-        id: probe
-        env:
-          GH_PAT: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          V="${{ steps.npm.outputs.latest }}"
-          # force 输入强制重建(跳过"已存在"检查); 否则版本已存在则跳过
-          if [ "${{ github.event.inputs.force }}" = "true" ]; then
-            echo "ALREADY_EXISTS=0" >> "$GITHUB_ENV"
-            echo "force rebuild — $V"
-          elif docker manifest inspect "${IMAGE}:${V}" >/dev/null 2>&1; then
-            echo "ALREADY_EXISTS=1" >> "$GITHUB_ENV"
-            echo "$V already built — skip"
-          else
-            echo "ALREADY_EXISTS=0" >> "$GITHUB_ENV"
-            echo "new version $V — building"
-          fi
-
-      - name: 构建镜像(仅 build+load, 不 push)
-        if: env.ALREADY_EXISTS == '0'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          build-args: DSH_VERSION=${{ steps.npm.outputs.latest }}
-          load: true
-          tags: |
-            smoke:latest
-          ### build-push-action 的 tags 用固定本地名; 冒烟通过后再手动推送(见下) ###
-
-      - name: 仓库内单元测试(relay 纯函数)
-        if: env.ALREADY_EXISTS == '0'
-        run: node docker/test/dsh-tls-relay.test.js
-
-      - name: 冒烟测试(起容器, 验证书/web/relay/非root)
-        if: env.ALREADY_EXISTS == '0'
-        run: bash docker/test/smoke.sh smoke:latest
-
-      - name: 推送镜像到 ghcr(冒烟通过后)
-        if: env.ALREADY_EXISTS == '0'
-        run: |
-          V="${{ steps.npm.outputs.latest }}"
-          docker tag smoke:latest "${IMAGE}:${V}"
-          docker tag smoke:latest "${IMAGE}:latest"
-          docker push "${IMAGE}:${V}"
-          docker push "${IMAGE}:latest"
-          echo "pushed ${IMAGE}:${V} + :latest"
-
-  # --- push 到 master 时自动跑测试: 校验本轮改动(entrypoint/relay/Dockerfile)不破坏构建与运行 ---
-  # 只 build+测试, 不推镜像(镜像更新仍由 check-and-build 的 schedule/manual 负责)
-  push-test:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: 检出源码
-        uses: actions/checkout@v4
-
-      - name: 查上游 dsh 版本 (仓库 DSH_VERSION 文件)
-        id: npm
-        run: |
-          # 权威来源 = 仓库根 DSH_VERSION 文件(非 Dockerfile: ARG 已无默认值)
+          # 权威来源 = 仓库根 DSH_VERSION 文件(Dockerfile 的 ARG 已无默认值)
           V=$(grep -vE "^[[:space:]]*(#|$)" DSH_VERSION | head -1 | tr -d "[:space:]")
           if [ -z "$V" ]; then
             echo "❌ DSH_VERSION 文件为空/无法解析 —— 版本必须显式指定, 不接受空的默认值" >&2
@@ -129,21 +55,72 @@ jobs:
           bash -n docker/entrypoint.sh
           bash -n docker/test/smoke.sh
 
-      - name: 构建镜像 (仅 build+load, 不 push)
+      - name: 登录 ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 计算 revision tag (版本 + 源码短 SHA)
+        id: tag
+        run: |
+          SHA=$(git rev-parse --short=12 HEAD)
+          echo "rev_tag=${{ steps.npm.outputs.latest }}-${SHA}" >> "$GITHUB_OUTPUT"
+          echo "revision tag: ${{ steps.npm.outputs.latest }}-${SHA}"
+
+      - name: 判断是否需要构建
+        id: probe
+        run: |
+          REV="${{ steps.tag.outputs.rev_tag }}"
+          # force: 手动强制重建
+          # 否则: 该 revision tag 已存在则跳过(同版本同源码 = 幂等, 无需重建)
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            echo "ALREADY_EXISTS=0" >> "$GITHUB_ENV"
+            echo "force rebuild — ${REV}"
+          elif docker manifest inspect "${IMAGE}:${REV}" >/dev/null 2>&1; then
+            echo "ALREADY_EXISTS=1" >> "$GITHUB_ENV"
+            echo "${REV} already built — skip"
+          else
+            echo "ALREADY_EXISTS=0" >> "$GITHUB_ENV"
+            echo "building ${REV} (event=${{ github.event_name }})"
+          fi
+
+      - name: 构建镜像(仅 build+load, 不 push)
+        if: env.ALREADY_EXISTS == '0'
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          # 对着"将上线的 npm latest 版本"验证仓库改动, 而非 Dockerfile 默认版本(review G1)。
-          # 用 ${{ steps.npm.outputs.latest }} 表达式, 勿用 ${DSH_VERSION:-...} shell 语法:
+          # 用 ${{ }} 表达式, 勿用 ${DSH_VERSION:-...} shell 语法:
           # GH Actions 的 with 不做 shell 展开, 会原样传成非法 npm tag(见 EINVALIDTAGNAME)。
           build-args: DSH_VERSION=${{ steps.npm.outputs.latest }}
           load: true
           tags: |
             smoke:latest
+          ### build-push-action 的 tags 用固定本地名; 冒烟通过后再手动推送(见下) ###
 
-      - name: 仓库内单元测试 (relay 纯函数)
+      - name: 仓库内单元测试(relay 纯函数)
+        if: env.ALREADY_EXISTS == '0'
         run: node docker/test/dsh-tls-relay.test.js
 
-      - name: 冒烟测试 (起容器, 验证书/web/relay/非root/自愈)
+      - name: 冒烟测试(起容器, 验证书/web/relay/非root/fail-closed)
+        if: env.ALREADY_EXISTS == '0'
         run: bash docker/test/smoke.sh smoke:latest
+
+      - name: 推送镜像到 ghcr(冒烟通过后)
+        if: env.ALREADY_EXISTS == '0'
+        run: |
+          REV="${{ steps.tag.outputs.rev_tag }}"
+          V="${{ steps.npm.outputs.latest }}"
+          # 不可变 revision tag: 永远推, 供精确回溯"哪个 commit 产出哪个镜像"
+          docker tag smoke:latest "${IMAGE}:${REV}"
+          docker push "${IMAGE}:${REV}"
+          echo "pushed ${IMAGE}:${REV}"
+          # 浮动 tag(版本号 + latest): 仅在 master 分支且非过期版本时推进。
+          #   这些 tag 会被部署机 pull, 必须始终指向"最新 master 的构建"。
+          docker tag smoke:latest "${IMAGE}:${V}"
+          docker tag smoke:latest "${IMAGE}:latest"
+          docker push "${IMAGE}:${V}"
+          docker push "${IMAGE}:latest"
+          echo "pushed ${IMAGE}:${V} + :latest"
