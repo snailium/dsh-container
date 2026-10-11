@@ -215,7 +215,7 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 |---|---|---|---|
 | `@anweat/dsh-browser` | 0.2.0-rc.1 | npm 官方发布 | 浏览器服务(web-search-pro 的必需依赖) |
 | `dsh-web-search-pro` | 0.1.16-alpha.1 | 本地构建 | 多引擎 web 搜索工具(peer 范围兼容 dsh 0.2.x) |
-| `dsh-repeat-tool-breaker` | 0.8.7 | npm 官方发布 | 重复工具调用防护(语义指纹+滑动窗口; 修 shell-HTTP 误拦) |
+| `dsh-repeat-tool-breaker` | 0.11.3 | npm 官方发布 | 重复工具调用防护 + web_fetch_file 独立组件(curl 默认后端) |
 | `dsh-command-context-trim` | 0.6.6 | npm 官方发布 | 命令上下文修剪 + compaction 调优(小窗口也自动调优) |
 | `dsh-llm-session-header` | 0.4.0 | npm 官方发布 | 按会话注入稳定路由头(x-opencode-session / X-SMG-Routing-Key) |
 
