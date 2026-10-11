@@ -7,7 +7,9 @@ services:
     build:
       context: .
       args:
-        DSH_VERSION: ${DSH_VERSION:-0.1.1-rc.2}   # 绑 npm version; 可用 .env 覆盖
+        # DSH_VERSION 强制必填(:?): 不再有默认值。缺省直接报错,
+        #   避免"静默构建过期版本"(Dockerfile/compose/.env 三处漂移的根因, 见 review v7)。
+        DSH_VERSION: ${DSH_VERSION:?请在 .env 设置 DSH_VERSION=上游 dsh npm 版本, 例如 0.2.0-rc.2}
     container_name: dsh
     restart: unless-stopped        # 替代 systemd 的重启策略
     # host 网络: 直接访问 .101/.102 模型端点 + relay 绑任意端口, 免端口映射
@@ -20,12 +22,19 @@ services:
       B70_API_KEY: local-b70
       # --- HTTPS 访问端口 (env 可改, 避免端口冲突) ---
       DSH_HTTPS_PORT: ${DSH_HTTPS_PORT:-8443}
+      # --- relay 绑定范围 (安全默认) ---
+      # 默认 loopback(仅本机) —— relay 把外部 Host 重写成受信权威, 绑全网等于把
+      # dsh 的 agent 能力开放给整个网段, 而 dsh 自身零认证(见 README 安全节)。
+      # 要开放给局域网/全网: 设 DSH_RELAY_BIND=0.0.0.0, 并**必须**外挂安全插件
+      # (如 dsh-mobile 做认证网关) —— 详见 README "开放局域网访问" 节。
+      DSH_RELAY_BIND: ${DSH_RELAY_BIND:-127.0.0.1}
       # --- 受信权威(relay把外部 Host 重写为它) ---
-      # DSH_LAN_IP 强制必填(无默认): 见 review S1, 缺省 loopback 会导致特权面暴露全网。
-      #   DSH_TRUSTED_AUTHORITY 独立可配; 不设则自动 = ${DSH_LAN_IP}:${DSH_WEB_PORT} (见 P1, 跟随 web 端口)。
+      # DSH_LAN_IP: 绑全网时必填(证书 SAN + relay 权威来源)。
+      #   绑 loopback 时可留空 —— 此时权威自动回落 127.0.0.1, 无需知道本机 IP。
+      DSH_LAN_IP: ${DSH_LAN_IP:-}
+      #   DSH_TRUSTED_AUTHORITY 不设则自动 = ${DSH_LAN_IP:-127.0.0.1}:${DSH_WEB_PORT} (见 P1, 跟随 web 端口)。
       #   ⚠️ 此值必须与 entrypoint 传给 dsh 的 --trusted-host 一致(Origin 校验: origin.host===host.host)。
-      DSH_LAN_IP: ${DSH_LAN_IP:?请在 .env 设置 DSH_LAN_IP=你的部署机实际局域网 IP}
-      DSH_TRUSTED_AUTHORITY: ${DSH_TRUSTED_AUTHORITY:-${DSH_LAN_IP}:${DSH_WEB_PORT:-3080}}
+      DSH_TRUSTED_AUTHORITY: ${DSH_TRUSTED_AUTHORITY:-${DSH_LAN_IP:-127.0.0.1}:${DSH_WEB_PORT:-3080}}
       # --- dsh web 监听 ---
       DSH_WEB_PORT: ${DSH_WEB_PORT:-3080}
     # 数据卷: 路径在 .env 里填(DSH_DATA_DIR / DSH_WORKSPACE_DIR), 仓库不含内部路径

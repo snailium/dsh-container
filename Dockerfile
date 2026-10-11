@@ -9,7 +9,10 @@
 #    node:22 镜像里安装, 全局包+bin+symlink 原位保留最稳。
 
 FROM node:22
-ARG DSH_VERSION=0.2.0-rc.2
+# DSH_VERSION 必须由构建者显式提供 —— 不设默认值。
+#   理由: 默认值会静默过期(Dockerfile/compose/.env 三处漂移), 构建出与预期不符的镜像。
+#   未提供时 entrypoint 与 compose 都会 fail-closed 报错(见 docker-compose.yml args 与 entrypoint.sh)。
+ARG DSH_VERSION
 # DSH_LAN_IP 必须经 docker-compose 的 .env 显式提供(见 review S1: 不填则 fail-closed 拒绝启动)
 ENV NODE_ENV=production \
     DSH_VERSION=${DSH_VERSION} \
@@ -35,7 +38,15 @@ RUN apt-get update \
 
 # 唯一上游依赖: npm 包 (node:22 镜像锁定 node22, 永不踩 createZstdDecompress 坑)
 # --prefer-offline + 长超时: npm 求解 rc 版全家桶的 peer 图较慢, 但不应无限回溯
-RUN npm i -g @deepseek-ai/dsh@${DSH_VERSION} --no-audit --no-fund
+# 构建期 fail-fast: DSH_VERSION 未提供时立刻报错, 不产出"看似成功"的坏镜像
+# 注意: 必须以 RUN sh -c 显式调用 —— 以 `[` 开头的 RUN 会被 Docker 当作 exec form(JSON 数组)
+RUN sh -c '[ -n "$DSH_VERSION" ] || { \
+      echo "❌ 构建失败: 未设置 DSH_VERSION。必须显式指定上游 dsh npm 版本。" >&2; \
+      echo "   docker build --build-arg DSH_VERSION=<version> ." >&2; \
+      echo "   docker compose: 在 .env 里设 DSH_VERSION=<version>" >&2; \
+      exit 1; \
+    }' \
+ && npm i -g @deepseek-ai/dsh@${DSH_VERSION} --no-audit --no-fund
 
 # headless 自动化测试: entrypoint 首次启动用 pnpm 安装测试 profile 插件。
 #   pnpm 在镜像构建期 `npm i -g pnpm` 装好(避免运行时 corepack 首次下载挂起)。

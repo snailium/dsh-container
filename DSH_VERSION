@@ -1,0 +1,12 @@
+# 上游 dsh 版本 —— 仓库级唯一权威来源 (single source of truth)
+#
+# 为什么单独一个文件: 版本此前分散在 Dockerfile / docker-compose.yml / .env.example 三处,
+# 结果出现"静默漂移"(compose 默认 0.1.1-rc.2 而 Dockerfile 是 0.2.0-rc.2), 构建出与
+# 预期不符的镜像(见 review v7)。现在:
+#   - 本文件 = 权威值, 由 CI 与本地构建读取
+#   - Dockerfile 不再持有默认值 (ARG DSH_VERSION 无默认), 未传参即构建失败(fail-fast)
+#   - docker-compose.yml / .env.example 不再持有默认值, 缺失即报错
+#
+# 升级流程: 改这一行 → 提交 → CI 自动重建并推送镜像。
+# 格式: 仅一个 npm 版本号, 无引号、无前缀、行尾可有注释。
+0.2.0-rc.2
