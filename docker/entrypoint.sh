@@ -19,10 +19,13 @@ DSH_MODE="${DSH_MODE:-web}"
 DSH_PLUGS_DIR="${DSH_PLUGS_DIR:-/plugs}"
 # headless 模式跑的 profile 名(首次启动若该 profile 缺插件, 会自动 seed + pnpm 安装)
 DSH_TEST_PROFILE="${DSH_TEST_PROFILE:-}"
-# 必须显式提供 DSH_LAN_IP(relay 权威)。不提供则 fail-closed, 避免特权面暴露全网(见 review S1)
+# relay 绑定范围。安全默认 = loopback(仅本机可达); 开放全网需显式设 0.0.0.0(见下方校验)
+DSH_RELAY_BIND="${DSH_RELAY_BIND:-127.0.0.1}"
+# DSH_LAN_IP: 绑全网时必填(证书 SAN + 权威来源); 绑 loopback 时留空即自动回落 127.0.0.1
 DSH_LAN_IP="${DSH_LAN_IP:-}"
 # 受信权威默认绑定 web 端口(而非硬编码 3080)——改 DSH_WEB_PORT 时默认权威自动跟随(见 review P1)
-DSH_TRUSTED_AUTHORITY="${DSH_TRUSTED_AUTHORITY:-${DSH_LAN_IP}:${DSH_WEB_PORT}}"
+#   实际默认值在下方绑定范围校验段按 loopback/全网两分支确定。
+DSH_TRUSTED_AUTHORITY="${DSH_TRUSTED_AUTHORITY:-}"
 
 # dsh-command-context-trim 容器级默认(环境变量优先于 profile 配置, 见插件 lib/config.js)。
 #   DSH_TRIM_AUTO_TUNE=true  首次 idle 时按各路由真实窗口自动调优 compaction, 结果持久化到 profile patch。
@@ -33,6 +36,17 @@ export DSH_TRIM_AUTO_TUNE="${DSH_TRIM_AUTO_TUNE:-true}"
 export DSH_TRIM_PRUNER="${DSH_TRIM_PRUNER:-auto}"
 
 log()  { echo "[entrypoint] $*"; }   # 定义在最先, 供下方 S1 校验使用
+
+# ---------------------------------------------------------------------------
+# DSH_VERSION 未设置即失败(v7): 该值在构建期由 build-arg 注入, 镜像内恒有值。
+#   此处校验用于捕获"镜像被错误重建/被篡改 ENV"的情况, 保证版本可追溯。
+# ---------------------------------------------------------------------------
+if [ -z "${DSH_VERSION:-}" ]; then
+  echo "[entrypoint] ❌ 镜像内 DSH_VERSION 为空。该镜像构建时未指定上游版本, 拒绝启动。" >&2
+  echo "   请重新构建: docker build --build-arg DSH_VERSION=<version> ." >&2
+  exit 1
+fi
+log "dsh 版本: ${DSH_VERSION}"
 
 # ---------------------------------------------------------------------------
 # 通用: profile 插件依赖检查 + pnpm install
@@ -91,11 +105,14 @@ except: pass" 2>/dev/null) || deps=""
 }
 
 # ---------------------------------------------------------------------------
-# FAIL-CLOSED 启动校验 (review S1):
-#   relay 绑 0.0.0.0(全网) + host 网络时, DSH_TRUSTED_AUTHORITY 若解析为 loopback,
-#   dsh 的 loopback-only 特权方法(fence)会对全网放行 → 特权面暴露。
-#   因此: 未配置 DSH_LAN_IP, 或 TRUSTED_AUTHORITY 为 loopback/localhost 时直接退出。
-#   (注意: 证书 SAN 需要 DSH_LAN_IP 为真实 IP, loopback 也会生成非法 IP SAN)
+# FAIL-CLOSED 启动校验 (review S1, v7 收紧默认):
+#   安全默认: relay 只绑 loopback(仅本机可达)。此时 loopback 权威是安全的
+#   —— dsh 的 loopback-only 特权方法(fence)本就只对本机放行, 语义自洽。
+#   开放全网(DSH_RELAY_BIND=0.0.0.0) 时, relay 会把外部 Host 重写成受信权威,
+#   若权威是 loopback → 特权方法对全网放行(fail-open) → 必须拒绝。
+#   即: 绑全网 + loopback 权威 = 拒绝启动; 想绑全网必须给真实 IP 权威,
+#   且应外挂认证/安全插件(如 dsh-mobile) —— dsh 自身零认证。
+#   (注意: 证书 SAN 需要 DSH_LAN_IP 为真实 IP, loopback 会生成非法 IP SAN)
 # ---------------------------------------------------------------------------
 is_loopback() { # 检测 host 部分是否 loopback (含 IPv6 [::1] 方括号形式, review L1)
   case "${1%%:*}" in
@@ -152,21 +169,28 @@ if [ "$DSH_MODE" = "headless" ]; then
     dsh --profile "$DSH_TEST_PROFILE" "$@"
 fi
 
-if [ -z "$DSH_LAN_IP" ]; then
-  echo "[entrypoint] ❌ 未设置 DSH_LAN_IP(部署机局域网 IP)。为保证不暴露特权面,拒绝启动。" >&2
-  echo "  请配置: cp .env.example .env 并在 .env 填 DSH_LAN_IP=你的实际IP" >&2
-  exit 1
-fi
-# relay 若绑 loopback(只本机), 则 loopback 权威安全; 否则(绑全网)必须非 loopback 权威
-RELAY_BIND_LOOPBACK="${DSH_RELAY_BIND_LOOPBACK:-0}"
-if [ "$RELAY_BIND_LOOPBACK" = "1" ]; then
-  log "relay 将绑 loopback, loopback 权威允许"
+# relay 绑定范围: 默认 loopback(安全默认, v7)。要开放全网需显式 DSH_RELAY_BIND=0.0.0.0。
+RELAY_BIND="${DSH_RELAY_BIND:-127.0.0.1}"
+if is_loopback "$RELAY_BIND"; then
+  # 仅本机可达: loopback 权威语义自洽, 不需要 DSH_LAN_IP
+  DSH_LAN_IP="${DSH_LAN_IP:-127.0.0.1}"
+  DSH_TRUSTED_AUTHORITY="${DSH_TRUSTED_AUTHORITY:-127.0.0.1:${DSH_WEB_PORT}}"
+  log "relay 绑 loopback($RELAY_BIND): 仅本机可达, 权威=$DSH_TRUSTED_AUTHORITY"
 else
-  if is_loopback "$DSH_TRUSTED_AUTHORITY"; then
-    echo "[entrypoint] ❌ DSH_TRUSTED_AUTHORITY($DSH_TRUSTED_AUTHORITY) 是 loopback, 但 relay 绑全网。此配置会让特权方法对全网放行(fail-open),拒绝启动。" >&2
-    echo "  请在 .env 设置非 loopback 的 DSH_LAN_IP, 或改用 DSH_RELAY_BIND_LOOPBACK=1" >&2
+  # 开放全网: 必须有真实 IP 权威, 否则特权方法对全网放行(fail-open)
+  if [ -z "$DSH_LAN_IP" ] || is_loopback "$DSH_LAN_IP"; then
+    echo "[entrypoint] ❌ DSH_RELAY_BIND=$RELAY_BIND(全网) 但 DSH_LAN_IP='${DSH_LAN_IP}' 未设置或为 loopback。" >&2
+    echo "   此配置会让 dsh 的 loopback-only 特权方法对全网放行(fail-open), 拒绝启动。" >&2
+    echo "   请在 .env 设置 DSH_LAN_IP=部署机实际局域网 IP;" >&2
+    echo "   或改回安全默认 DSH_RELAY_BIND=127.0.0.1(仅本机访问)。" >&2
     exit 1
   fi
+  if is_loopback "$DSH_TRUSTED_AUTHORITY"; then
+    echo "[entrypoint] ❌ DSH_TRUSTED_AUTHORITY($DSH_TRUSTED_AUTHORITY) 是 loopback, 但 relay 绑全网。拒绝启动。" >&2
+    exit 1
+  fi
+  echo "[entrypoint] ⚠ relay 绑全网($RELAY_BIND) —— dsh 自身零认证, 任何能连到 ${DSH_HTTPS_PORT} 的主机都可驱动 agent。" >&2
+  echo "   请务必外挂认证/安全插件(如 dsh-mobile), 并用防火墙限制来源(见 README 安全节)。" >&2
 fi
 
 # 默认 agent provider envs (llama.cpp/vLLM 端点不校验 key 值, 但 dsh 依此做凭据存在性检查)
@@ -271,13 +295,7 @@ fi
 # ---------------------------------------------------------------------------
 # 2) 启动 TLS relay + dsh web 双进程, 互相看护
 # ---------------------------------------------------------------------------
-# relay 默认绑全网(0.0.0.0)供 LAN/WARP 访问; DSH_RELAY_BIND_LOOPBACK=1 时只绑本机
-if [ "${DSH_RELAY_BIND_LOOPBACK:-0}" = "1" ]; then
-  RELAY_BIND="127.0.0.1"
-  log "relay 仅绑本机 loopback (DSH_RELAY_BIND_LOOPBACK=1)"
-else
-  RELAY_BIND="0.0.0.0"
-fi
+# RELAY_BIND 已在启动校验段决定(默认 127.0.0.1, 安全默认 v7)
 log "启动 TLS relay  https://${RELAY_BIND}:${DSH_HTTPS_PORT} -> http://127.0.0.1:${DSH_WEB_PORT} (trusted-as ${DSH_TRUSTED_AUTHORITY})"
 runuser -u node -- node /usr/local/bin/dsh-tls-relay.js \
   "$RELAY_BIND" "$DSH_HTTPS_PORT" "$SERVER_PEM" \
