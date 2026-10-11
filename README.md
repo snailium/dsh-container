@@ -1,43 +1,53 @@
 # DeepSeek Harness (dsh) 容器化部署
 
-把 dsh(DeepSeek Harness agent)打包成 Docker 镜像, 随官方 npm 版本自动更新。
+把 dsh(DeepSeek Harness agent)打包成 Docker 镜像，上游为官方 npm 包。
 
-> ⚠️ 本仓库不含任何内网 IP/密钥。部署时 `cp .env.example .env`, 填你的**实际局域网 IP**。
+> ⚠️ 本仓库不含真实内网 IP/密钥（`.env.example` 与代码示例中的 `192.168.1.1` 是通用占位地址）。
+> 部署时 `cp .env.example .env`，填**你自己的**版本号与路径。
 
 ## 🚀 快速开始
 
 > **平台要求：仅 Linux**（`network_mode: host` 依赖 Linux 语义，macOS/Windows 会静默失效，见安全章）。
 
 ```bash
-cp .env.example .env     # 必填 DSH_LAN_IP (你的部署机局域网 IP)
-docker compose up -d     # 启动
+cp .env.example .env     # 必填: DSH_VERSION + DSH_DATA_DIR + DSH_WORKSPACE_DIR
+docker compose up -d     # 启动(默认仅本机可访问)
 ```
-> `DSH_LAN_IP` 为强制项: 不填则 compose 拒绝启动(fail-closed)。这是**刻意为之**——缺省 loopback 会让 dsh 特权方法暴露全网(见安全章)。
+
+> `DSH_VERSION` 为强制项: 不填则 compose 直接报错。**刻意不设默认值**——默认值会静默过期，
+> 构建出与预期不符的镜像（曾出现 Dockerfile/compose/.env 三处版本漂移）。
+>
+> relay 默认只绑 `127.0.0.1`（仅本机）。要开放给局域网/全网**必须**显式 `DSH_RELAY_BIND=0.0.0.0`
+> 并外挂安全插件，见[开放局域网访问](#-开放局域网访问可选)。
 
 ## 🧱 镜像构建与上游绑定
 
 - **上游源 = 唯一 npm 包** `@deepseek-ai/dsh`(自包含, 无需 GitHub 源码/asset)
-- 版本经 build-arg 绑定 npm version, 由 CI 定时轮询 `dist-tags.latest` 自动重建:
+- **版本必须显式指定**（`DSH_VERSION` build-arg，无默认值）:
   ```bash
   docker build --build-arg DSH_VERSION=0.2.0-rc.2 .
   ```
-- 镜像 tag 直接用 npm 版本号 (如 `0.1.1-rc.2`, `latest`)
+  不传该参数 → 构建期立刻报错（fail-fast），不会产出坏镜像。
+- 版本号的**唯一权威来源 = `.env` 的 `DSH_VERSION`**；CI 从 Dockerfile 读取该参数作为镜像 tag。
+- 镜像 tag 直接用 npm 版本号 (如 `0.2.0-rc.2`, `latest`)
 - 发布到 repo-scoped `ghcr.io/snailium/dsh-container/dsh` (跟随仓库: 公开仓库→镜像公开; 也可 Web UI 单独改成 private)
 
 ### 自动更新 (GitHub Actions)
-`.github/workflows/update.yml` 定时轮询 npm `dist-tags.latest`:
-- 有新版 → `docker build --build-arg DSH_VERSION=<新版本>` → 推 ghcr
-- 部署机 `docker compose pull && up -d` 即升级
+`.github/workflows/update.yml` 的版本来源是 **Dockerfile 里的 `ARG DSH_VERSION`**（不再轮询 npm）:
+- 升级 = 手动 bump `ARG DSH_VERSION` → 提交 → CI 重建镜像并推 ghcr
+- `push` 到 master 只跑测试不推镜像；`schedule`(6h)/手动触发才构建并推送
+- 部署机 `docker compose pull && docker compose up -d` 即升级
 
 ## 🌐 HTTPS 端口通用 env 化 (避免端口冲突)
 
 | 环境变量 | 默认 | 说明 |
 |---|---|---|
+| `DSH_VERSION` | **必填** | 上游 dsh npm 版本。**无默认，缺失即报错** |
 | `DSH_WEB_PORT` | 3080 | dsh web HTTP 监听端口 |
 | `DSH_HTTPS_PORT` | 8443 | HTTPS(TLS relay)访问端口 |
-| `DSH_LAN_IP` | **必填** | 部署机局域网 IP (证书 SAN + 受信权威)。**无默认, 缺失 compose 拒绝启动** |
-| `DSH_TRUSTED_AUTHORITY` | {LAN_IP}:3080 | relay 把外部 Host 重写成的受信权威。独立可配 |
-| `DSH_RELAY_BIND_LOOPBACK` | 0 | `1` 时 relay 只绑本机(配 loopback 权威用于本机专用) |
+| `DSH_RELAY_BIND` | `127.0.0.1` | relay 绑定地址。默认仅本机；`0.0.0.0` = 开放全网（须配 LAN_IP + 外挂安全插件） |
+| `DSH_LAN_IP` | 绑全网时必填 | 部署机局域网 IP (证书 SAN + 受信权威)。绑 loopback 时可留空 |
+| `DSH_TRUSTED_AUTHORITY` | `{LAN_IP 或 127.0.0.1}:{WEB_PORT}` | relay 把外部 Host 重写成的受信权威。独立可配 |
 
 改 HTTPS 端口(避开冲突): 编辑 `.env`
 ```bash
@@ -45,6 +55,31 @@ echo "DSH_HTTPS_PORT=8444" >> .env
 docker compose up -d
 ```
 访问地址相应变成 `https://<你的DSH_LAN_IP>:8444`。
+
+## 🔓 开放局域网访问(可选)
+
+**默认只绑 loopback（仅本机）。** 想让局域网/WARP 访问，需要理解三层风险：
+
+1. **dsh 自身零认证**——任何能连到 `DSH_HTTPS_PORT` 的主机都能驱动 agent（读写文件、执行命令）。
+   dsh ≥0.1.2 的 access token 只防"随手访问"，不是多用户认证。
+2. **relay 会把外部 Host 重写成受信权威**——这是让 GUI 与 dsh 特权方法正常协作的机制，
+   也因此**绑全网 + loopback 权威 = 特权方法对全网放行**。entrypoint 对此 fail-closed 拒绝启动。
+3. **必须外挂安全插件**。`network_mode: host` + 全网 bind 时，请同时部署认证网关类插件，
+   例如 **`dsh-mobile`**（webServer 网关）；仅靠防火墙不够。
+
+```bash
+# .env
+DSH_RELAY_BIND=0.0.0.0
+DSH_LAN_IP=192.168.1.10        # 你的实际局域网 IP(必填)
+DSH_WORKSPACE_DIR=/srv/dsh-ws
+```
+```bash
+# 同时用防火墙限制来源(示例: 只放行本网段到 8443)
+sudo ufw allow proto tcp from 192.168.1.0/24 to any port 8443
+```
+
+> 安全默认的代价：绑 loopback 时**远程浏览器无法直接访问**。需要远程访问又不想开放全网时，
+> 优先考虑 SSH 端口转发（`ssh -L 8443:127.0.0.1:8443 <host>`）而不是绑全网。
 
 ## 🔐 TLS 证书 (数据卷内自动管理)
 
@@ -96,7 +131,7 @@ mkdir -p /home/user/dsh-test-home
 # settings.yaml: 声明被测 provider + 默认模型(按你的后端填)
 #   例: llm-pi-ai.providers.<name> + agent-default-model 指到它(或用 --patch 覆盖)
 
-# 跑一个 headless 单任务 (担默认 entrypoint, 非 docker run --entrypoint dsh)
+# 跑一个 headless 单任务 (用默认 entrypoint, 非 docker run --entrypoint dsh)
 docker run --rm --network host \
   -v /home/user/dsh-test-home:/dsh-home \
   -e DSH_MODE=headless -e DSH_TEST_PROFILE=headless_wsp \
@@ -190,16 +225,18 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 > 里使用，请自行从 npm 安装。
 
 **web 模式 profile**（用户自建）首次启动自动安装:
+镜像 `/plugs/` 内可离线安装的 tgz（`dsh-mobile` 为 web 专用；另三个与 headless 表相同版本）:
 
 | 插件 | 版本 | 来源 | 作用 |
 |---|---|---|---|
-| `@anweat/dsh-browser` | 0.1.15 | npm 官方发布 | 浏览器服务 |
-| `dsh-web-search-pro` | 0.1.15 | npm 官方发布 | 多引擎 web 搜索工具 |
+| `@anweat/dsh-browser` | 0.2.0-rc.1 | npm 官方发布 | 浏览器服务（与 headless 同一份 tgz） |
+| `dsh-web-search-pro` | 0.1.16-alpha.1 | 本地构建 | 多引擎 web 搜索工具（与 headless 同一份 tgz） |
 | `dsh-mobile` | 0.5.3 | npm 官方发布 | 手机访问 harness(webServer 网关; **headless 不可用**, 无 webServer 会启动崩溃) |
 
 > ⚠️ **dsh-mobile 是 web 模式专用**：它的 bundle 注入 `webServer` + `connection`，
 > headless CLI 模式没有这两个服务 → 激活失败 → 启动崩溃。tgz 已烘焙进 `/plugs/`，
 > 自建 web profile 时加一行依赖即可离线安装；headless 模板不装它。
+> 它同时是[开放局域网访问](#-开放局域网访问可选)时推荐外挂的认证网关插件。
 
 > **自动安装机制**：entrypoint 启动时扫描 `$DSH_HOME/profiles/` 下所有含 `package.json` 的 profile，
 > 从 dependencies 提取包名（排除 `@deepseek-ai/dsh-*` 框架包），缺则自动 `pnpm install`。
@@ -230,14 +267,29 @@ docker compose up -d       # 重建容器, 数据卷原样复用
 ### ⚠️ 先说清楚：全链路零认证（务必读）
 **dsh 的 Web UI 和 relay 都没有登录认证。** 上游 fence 明确声明 "this fence is not an auth layer"。这意味着:
 - **任何能连到 8443 的主机** 都能读取全部会话/对话内容, 并通过非特权方法**驱动 agent 执行**(agent 能读写工作区!)
-- 防火墙、WARP/Mesh 访问隔离、IP 白名单是**唯一**的真实防线——不是摆设, 是必需的
-- 因此**禁止**把 8443 暴露到公网/不可信网络
+- 本项目因此**默认只绑 loopback**（v7）：不配置就只在本机可达，远程连不上。
+- 一旦你 `DSH_RELAY_BIND=0.0.0.0` 开放全网，防火墙、WARP/Mesh 访问隔离、IP 白名单
+  以及**外挂认证插件**就是**唯一**的真实防线——不是摆设, 是必需的
+- **禁止**把 8443 直接暴露到公网/不可信网络
 
 ### 强制防护(本项目已内置)
-- **fail-closed 启动校验** (审查 S1): `DSH_LAN_IP` 必填(compose 校验 + entrypoint 双重保证), 缺省 loopback 时拒绝启动——绝不把特权面(bind-mount 的配置/凭据/TLS 私钥)暴露给全网
+- **安全默认: relay 只绑 loopback** (v7): 默认 `DSH_RELAY_BIND=127.0.0.1`，仅本机可达。
+  要开放全网必须显式 opt-in **且**配 `DSH_LAN_IP` **且**应外挂安全插件——见[开放局域网访问](#-开放局域网访问可选)
+- **fail-closed 启动校验** (审查 S1): 绑全网 + 缺失/loopback 权威 = 拒绝启动，
+  绝不把特权面对全网放行(fail-open)；`DSH_VERSION` 缺失同样直接报错
 - **非 root 运行** (审查 H1): entrypoint(以 root 启动以管理证书/chown) 用 `runuser -u node` 降权启动 dsh/relay 工作进程, 进程属主为 node(uid 1000), 无 root 权限
+- **chown 只接管 root 属主** (审查 T2/C1): 绝不改写其它 uid 的宿主数据目录
 - **特权方法隔离**: dsh 的 `settings.*`/`credentials.*`/`host.pickDirectory`/`llm.discoverModels` 只认 loopback Host, 远程始终 403(改 Models 走配置驱动)
 - image 内不烘焙任何密钥/配置; 全运行时挂卷
+
+### 全局指令文件 (AGENTS.md)
+首次启动时 entrypoint 会向数据卷注入 `$DSH_HOME/AGENTS.md`（dsh 的用户级全局指令，
+会注入**每一个**会话）。开箱内容是一条工作区卫生规则：**临时文件只用相对路径**
+（明确禁止 `/tmp` 与 `/workspace` 等绝对路径）。dsh 的 `/tmp` 不跨工具调用保留，
+绝对路径产物会对后续步骤不可见。
+
+> **已存在则不覆盖**：如果你自己维护 `$DSH_HOME/AGENTS.md`（或想改这条规则），
+> entrypoint 完全不动它。想恢复出厂内容 → 删除该文件后重启容器。
 
 ### 建议的防火墙(ufw 示例, 默认拒绝入向)
 ```bash
@@ -248,7 +300,8 @@ sudo ufw allow proto tcp from 127.0.0.1 to any port 3080,8443
 # 局域网/WARP 来源(按需开启, 替换成你的网段/来源)
 sudo ufw allow proto tcp from 192.168.1.0/24 to any port 8443
 ```
-> 更严格的做法: 完全不开放 8443 到 LAN, 仅通过 WARP/Mesh(Cloudflare) 访问; 或用 `DSH_RELAY_BIND_LOOPBACK=1` 只在本机用。
+> 更严格的做法: 完全不开放 8443 到 LAN, 仅通过 WARP/Mesh(Cloudflare) 访问;
+> 或保持默认的 `DSH_RELAY_BIND=127.0.0.1` 只在本机用（推荐）。
 
 ### 平台
 - 仅 **Linux** (`network_mode: host` + relay 依赖 Linux 网络语义)。macOS/Windows Docker 的 host 网络语义不同, 会静默失效。

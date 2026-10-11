@@ -4,4 +4,5 @@
 harness-home
 node_modules
 *.log
-.DS_Store.git-review-config
+.DS_Store
+.git-review-config
