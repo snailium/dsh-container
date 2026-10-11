@@ -293,6 +293,45 @@ if [ -d "$DSH_HOME/profiles" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 1.6) 首次启动注入全局 AGENTS.md(v7): 容器内所有 dsh 会话自动带上这些规则。
+#   dsh 原生读取 $DSH_HOME/AGENTS.md 作为用户全局指令(注入每个会话), 故写在这里
+#   即"开箱即生效", 用户无需自行配置。
+#   语义: **仅在文件不存在时写入** —— 已存在则完全不动, 用户可自由改写/追加;
+#         想恢复出厂规则就删除该文件再重启容器。
+# ---------------------------------------------------------------------------
+AGENTS_MD="$DSH_HOME/AGENTS.md"
+if [ ! -f "$AGENTS_MD" ]; then
+  log "首次启动: 注入全局 AGENTS.md → $AGENTS_MD"
+  cat > "$AGENTS_MD" <<'AGENTS_EOF'
+# User-global instructions
+
+This is `$DSH_HOME/AGENTS.md` — the user-global instruction file that dsh injects into
+every session. It is seeded by the container entrypoint on first start; edit it freely.
+
+## Temporary files: relative paths only
+
+Temporary files MUST be written to a **relative path inside the session workspace**.
+
+Absolute paths are **forbidden** — this explicitly includes `/tmp` and `/workspace`.
+Scratch output, intermediate artifacts, downloaded evidence, and anything a later step
+must read belong in a relative directory under the current working directory:
+
+```bash
+mkdir -p .tmp && cmd > .tmp/intermediate.json
+```
+
+Use a directory the project already gitignores (`.tmp/`, `.work/`, or similar).
+`/tmp` is not durable: it is not shared between tool calls, is invisible to processes
+started later, and does not survive the container. If an artifact must outlive the
+command that produced it, write it under the workspace by relative path.
+AGENTS_EOF
+  chown "$DSH_RUN_UID:$DSH_RUN_GID" "$AGENTS_MD" 2>/dev/null || true
+  log '  ✓ 已注入(含"临时文件只用相对路径"规则)'
+else
+  log "AGENTS.md 已存在, 保留用户版本(不覆盖): $AGENTS_MD"
+fi
+
+# ---------------------------------------------------------------------------
 # 2) 启动 TLS relay + dsh web 双进程, 互相看护
 # ---------------------------------------------------------------------------
 # RELAY_BIND 已在启动校验段决定(默认 127.0.0.1, 安全默认 v7)
