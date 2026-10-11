@@ -7,12 +7,11 @@ set -euo pipefail
 IMG="${1:-smoke:latest}"
 NAME="dsh-smoke-local"
 
-echo "### 起临时容器(loopback模式, 测试段IP) ###"
+echo "### 起临时容器(安全默认: relay 绑 loopback) ###"
 docker rm -f "$NAME" >/dev/null 2>&1 || true
+# 使用 v7 的安全默认: 不设 DSH_RELAY_BIND → entrypoint 绑 127.0.0.1,
+# 权威自动回落 127.0.0.1:3080, 也不需要 DSH_LAN_IP。这里正是要验证**默认路径**。
 docker run -d --name "$NAME" \
-  -e DSH_LAN_IP=203.0.113.1 \
-  -e DSH_TRUSTED_AUTHORITY=203.0.113.1:3080 \
-  -e DSH_RELAY_BIND_LOOPBACK=1 \
   "$IMG" >/dev/null
 
 # 等证书生成(entrypoint)
@@ -101,7 +100,49 @@ else
   exit 1
 fi
 
-echo "### 6. 看护自愈: 杀 dsh web worker, 验证自动拉起 (review W1/T1) ###"
+echo "### 6. /workspace 属主已接管给运行用户 (review v7 F2 覆盖缺口) ###"
+# 全新部署时宿主工作区目录不存在 → docker 自动创建 root:root 0755 →
+# entrypoint 必须接管(node), 否则 UI 里建工作区/写数据失败。
+WS_OWNER=$(docker exec "$NAME" sh -c 'stat -c %u /workspace' 2>/dev/null || echo "")
+if [ "$WS_OWNER" != "1000" ]; then
+  echo "❌ FAIL: /workspace 属主应为 1000(node), 实际 '$WS_OWNER'" >&2
+  docker rm -f "$NAME" >/dev/null 2>&1
+  exit 1
+fi
+echo "  /workspace 属主=1000(node) ✓"
+# 运行用户必须真的可写(属主对不等于可写)
+if ! docker exec -u node "$NAME" sh -c 'touch /workspace/.smoke-write-probe && rm -f /workspace/.smoke-write-probe' 2>/dev/null; then
+  echo "❌ FAIL: node(1000) 无法写入 /workspace" >&2
+  docker rm -f "$NAME" >/dev/null 2>&1
+  exit 1
+fi
+echo "  node 可写 /workspace ✓"
+
+echo "### 7. 全局 AGENTS.md 已注入 (review v7 开箱即生效规则) ###"
+if ! docker exec "$NAME" sh -c 'test -f /dsh-home/AGENTS.md'; then
+  echo "❌ FAIL: 首次启动未注入 /dsh-home/AGENTS.md" >&2
+  docker rm -f "$NAME" >/dev/null 2>&1
+  exit 1
+fi
+# 必须包含"临时文件只用相对路径"这条核心规则(相对路径 + 明示禁止 /tmp 与 /workspace)
+AG_OK=$(docker exec "$NAME" sh -c 'grep -qE "relative path" /dsh-home/AGENTS.md && grep -qE "/tmp" /dsh-home/AGENTS.md && grep -qE "/workspace" /dsh-home/AGENTS.md && echo yes' 2>/dev/null || true)
+if [ "$AG_OK" != "yes" ]; then
+  echo "❌ FAIL: AGENTS.md 未包含相对路径规则(需同时出现 relative path、/tmp、/workspace)" >&2
+  docker exec "$NAME" sh -c 'cat /dsh-home/AGENTS.md' >&2 || true
+  docker rm -f "$NAME" >/dev/null 2>&1
+  exit 1
+fi
+echo '  AGENTS.md 含"相对路径"规则 ✓'
+# 属主须为运行用户, 否则 UI 内编辑会被拒
+AG_OWNER=$(docker exec "$NAME" sh -c 'stat -c %u /dsh-home/AGENTS.md' 2>/dev/null || echo "")
+if [ "$AG_OWNER" != "1000" ]; then
+  echo "❌ FAIL: AGENTS.md 属主应为 1000(node), 实际 '$AG_OWNER'" >&2
+  docker rm -f "$NAME" >/dev/null 2>&1
+  exit 1
+fi
+echo "  AGENTS.md 属主=1000(node) ✓"
+
+echo "### 8. 看护自愈: 杀 dsh web worker, 验证自动拉起 (review W1/T1) ###"
 # 必须精确杀 node worker(-u node 排除 root 的 runuser wrapper): 否则杀 wrapper 而 worker
 # 存活 → watchdog 重启因 3080 被孤儿 worker 占用 EADDRINUSE 秒崩, 且 heal 判定是假阳性,
 # 测不到真正的 W1 重启路径(见 review T1)。
@@ -139,6 +180,42 @@ else
     exit 1
   fi
 fi
+
+echo "### 9. fail-closed 校验: 绑全网 + loopback 权威必须拒绝启动 (review v7 S1) ###"
+# 这是安全模型的核心分支, 此前从未被冒烟覆盖(旧脚本只用 loopback 模式跑)。
+# 绑全网却给 loopback/缺失权威 = 特权方法对全网放行 → entrypoint 必须 exit 非零。
+NEG_NAME="dsh-smoke-neg"
+docker rm -f "$NEG_NAME" >/dev/null 2>&1 || true
+# 9a. 绑全网 + 未设 DSH_LAN_IP → 必须失败
+docker run -d --name "$NEG_NAME" -e DSH_RELAY_BIND=0.0.0.0 "$IMG" >/dev/null
+sleep 8
+NEG_STATE=$(docker inspect -f '{{.State.Running}}' "$NEG_NAME" 2>/dev/null || echo "missing")
+NEG_LOGS=$(docker logs "$NEG_NAME" 2>&1 || true)
+if [ "$NEG_STATE" = "true" ]; then
+  echo "❌ FAIL: 绑全网但未设 DSH_LAN_IP 时容器仍在运行(fail-open)" >&2
+  docker rm -f "$NEG_NAME" >/dev/null 2>&1
+  exit 1
+fi
+if ! echo "$NEG_LOGS" | grep -q "DSH_LAN_IP"; then
+  echo "❌ FAIL: 拒绝启动但日志未说明原因(未提及 DSH_LAN_IP)" >&2
+  echo "$NEG_LOGS" | tail -10 >&2
+  docker rm -f "$NEG_NAME" >/dev/null 2>&1
+  exit 1
+fi
+echo "  绑全网 + 无 LAN_IP → 拒绝启动 ✓"
+# 9b. 绑全网 + loopback 权威 → 必须失败
+docker rm -f "$NEG_NAME" >/dev/null 2>&1 || true
+docker run -d --name "$NEG_NAME" \
+  -e DSH_RELAY_BIND=0.0.0.0 -e DSH_LAN_IP=127.0.0.1 "$IMG" >/dev/null
+sleep 8
+NEG_STATE=$(docker inspect -f '{{.State.Running}}' "$NEG_NAME" 2>/dev/null || echo "missing")
+if [ "$NEG_STATE" = "true" ]; then
+  echo "❌ FAIL: 绑全网 + loopback 权威时容器仍在运行(fail-open)" >&2
+  docker rm -f "$NEG_NAME" >/dev/null 2>&1
+  exit 1
+fi
+echo "  绑全网 + loopback 权威 → 拒绝启动 ✓"
+docker rm -f "$NEG_NAME" >/dev/null 2>&1 || true
 
 echo "### SMOKE PASS ###"
 docker rm -f "$NAME" >/dev/null 2>&1
