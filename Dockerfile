@@ -51,13 +51,13 @@ RUN sh -c '[ -n "$DSH_VERSION" ] || { \
 # headless 自动化测试: entrypoint 首次启动用 pnpm 安装测试 profile 插件。
 #   pnpm 在镜像构建期 `npm i -g pnpm` 装好(避免运行时 corepack 首次下载挂起)。
 #   插件以 vendor tgz 形式烘焙进镜像 /plugs/, 离线安装(不依赖运行时网络):
-#   - @anweat/dsh-browser@0.2.0-rc.1 (官方发布, 适配 dsh 0.1.7-rc.2 / 0.2.0-rc.x)
-#   - dsh-web-search-pro@0.1.16-alpha.1 (本地构建; peer 范围 >=0.1.8 <0.2.0 browser, >=0.1.7-rc.2 <0.2.1-0 dsh)
-#   - dsh-repeat-tool-breaker@0.11.4 (官方发布; web_fetch_file 独立组件, curl 默认后端)
-#   - dsh-command-context-trim@0.6.6 (官方发布; 小窗口路由也自动调优, 移除 tuneStockDisabledRoutes)
-#   - dsh-llm-session-header@0.4.0 (官方发布; 按会话注入稳定路由头: x-opencode-session / X-SMG-Routing-Key)
-#   - dsh-mobile@0.5.3 (官方发布; 手机访问 webServer, 仅 web 模式自建 profile 使用——headless 不装,
-#     无 webServer 服务会启动崩溃。tgz 含预编译 funnel 二进制, ~26MB)
+#   - @anweat/dsh-browser@0.2.2 (本地构建; peer 范围 >=0.2.0-rc.2 <0.2.2-0, 适配 dsh 0.2.1-rc.x)
+#   - dsh-web-search-pro@0.1.16-alpha.1 (本地构建; peer 范围 >=0.2.0-rc.1 <0.2.2-0 browser/dsh)
+#   - dsh-repeat-tool-breaker@0.11.6 (本地构建; web_fetch_file 独立组件, curl 默认后端)
+#   - dsh-command-context-trim@0.6.7 (本地构建; 小窗口路由也自动调优)
+#   - dsh-llm-session-header@0.4.1 (官方发布; 按会话注入稳定路由头: x-opencode-session / X-SMG-Routing-Key)
+#   - dsh-mobile@0.6.13 (官方发布; 手机访问 webServer, 仅 web 模式自建 profile 使用——headless 不装,
+#     无 webServer 服务会启动崩溃。tgz 含预编译 funnel 二进制, ~27MB)
 RUN npm i -g pnpm
 
 # 工程内置代码层: TLS relay + entrypoint

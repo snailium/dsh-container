@@ -25,11 +25,11 @@ docker compose up -d     # 启动(默认仅本机可访问)
 - **上游源 = 唯一 npm 包** `@deepseek-ai/dsh`(自包含, 无需 GitHub 源码/asset)
 - **版本必须显式指定**（`DSH_VERSION` build-arg，无默认值）:
   ```bash
-  docker build --build-arg DSH_VERSION=0.2.0-rc.2 .
+  docker build --build-arg DSH_VERSION=0.2.1-rc.2 .
   ```
   不传该参数 → 构建期立刻报错（fail-fast），不会产出坏镜像。
 - 版本号的**唯一权威来源 = `.env` 的 `DSH_VERSION`**；CI 从 Dockerfile 读取该参数作为镜像 tag。
-- 镜像 tag 直接用 npm 版本号 (如 `0.2.0-rc.2`, `latest`)
+- 镜像 tag 直接用 npm 版本号 (如 `0.2.1-rc.2`, `latest`)
 - 发布到 repo-scoped `ghcr.io/snailium/dsh-container/dsh` (跟随仓库: 公开仓库→镜像公开; 也可 Web UI 单独改成 private)
 
 ### 自动更新 (GitHub Actions)
@@ -213,11 +213,11 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 
 | 插件 | 版本 | 来源 | 作用 |
 |---|---|---|---|
-| `@anweat/dsh-browser` | 0.2.0-rc.1 | npm 官方发布 | 浏览器服务(web-search-pro 的必需依赖) |
+| `@anweat/dsh-browser` | 0.2.2 | 本地构建 | 浏览器服务(web-search-pro 的必需依赖) |
 | `dsh-web-search-pro` | 0.1.16-alpha.1 | 本地构建 | 多引擎 web 搜索工具(peer 范围兼容 dsh 0.2.x) |
-| `dsh-repeat-tool-breaker` | 0.11.4 | npm 官方发布 | 重复工具调用防护 + web_fetch_file 独立组件(curl 默认后端) |
-| `dsh-command-context-trim` | 0.6.6 | npm 官方发布 | 命令上下文修剪 + compaction 调优(小窗口也自动调优) |
-| `dsh-llm-session-header` | 0.4.0 | npm 官方发布 | 按会话注入稳定路由头(x-opencode-session / X-SMG-Routing-Key) |
+| `dsh-repeat-tool-breaker` | 0.11.6 | 本地构建 | 重复工具调用防护 + web_fetch_file 独立组件(curl 默认后端) |
+| `dsh-command-context-trim` | 0.6.7 | 本地构建 | 命令上下文修剪 + compaction 调优(小窗口也自动调优) |
+| `dsh-llm-session-header` | 0.4.1 | npm 官方发布 | 按会话注入稳定路由头(x-opencode-session / X-SMG-Routing-Key) |
 
 > **容器自带的 TLS relay 与 `dsh-relay` 插件是两回事**：容器用的是自己那份独立脚本
 > （`dsh-tls-relay.js`），由 entrypoint 直接启动，**不依赖也不安装** `dsh-relay` 插件。
@@ -229,9 +229,9 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 
 | 插件 | 版本 | 来源 | 作用 |
 |---|---|---|---|
-| `@anweat/dsh-browser` | 0.2.0-rc.1 | npm 官方发布 | 浏览器服务（与 headless 同一份 tgz） |
+| `@anweat/dsh-browser` | 0.2.2 | 本地构建 | 浏览器服务（与 headless 同一份 tgz） |
 | `dsh-web-search-pro` | 0.1.16-alpha.1 | 本地构建 | 多引擎 web 搜索工具（与 headless 同一份 tgz） |
-| `dsh-mobile` | 0.5.3 | npm 官方发布 | 手机访问 harness(webServer 网关; **headless 不可用**, 无 webServer 会启动崩溃) |
+| `dsh-mobile` | 0.6.13 | npm 官方发布 | 手机访问 harness(webServer 网关; **headless 不可用**, 无 webServer 会启动崩溃) |
 
 > ⚠️ **dsh-mobile 是 web 模式专用**：它的 bundle 注入 `webServer` + `connection`，
 > headless CLI 模式没有这两个服务 → 激活失败 → 启动崩溃。tgz 已烘焙进 `/plugs/`，
