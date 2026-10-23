@@ -214,9 +214,9 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 | 插件 | 版本 | 来源 | 作用 |
 |---|---|---|---|
 | `@anweat/dsh-browser` | 0.2.2 | 本地构建 | 浏览器服务(web-search-pro 的必需依赖) |
-| `dsh-web-search-pro` | 0.1.16-alpha.1 | 本地构建 | 多引擎 web 搜索工具(peer 范围兼容 dsh 0.2.x) |
+| `dsh-web-search-pro` | 0.2.2 | 本地构建 | 多引擎 web 搜索 + CLI 适配层/平台后端链(peer 范围兼容 dsh 0.2.1) |
 | `dsh-repeat-tool-breaker` | 0.11.6 | 本地构建 | 重复工具调用防护 + web_fetch_file 独立组件(curl 默认后端) |
-| `dsh-command-context-trim` | 0.6.7 | 本地构建 | 命令上下文修剪 + compaction 调优(小窗口也自动调优) |
+| `dsh-command-context-trim` | 0.7.3 | npm 官方发布 | 命令上下文修剪 + compaction 调优(分词器校准, 按路由 maxTokens 预留预算) |
 | `dsh-llm-session-header` | 0.4.1 | npm 官方发布 | 按会话注入稳定路由头(x-opencode-session / X-SMG-Routing-Key) |
 
 > **容器自带的 TLS relay 与 `dsh-relay` 插件是两回事**：容器用的是自己那份独立脚本
@@ -230,8 +230,8 @@ modelPolicies, thresholdRatio). ... the value is persisted in the profile patch 
 | 插件 | 版本 | 来源 | 作用 |
 |---|---|---|---|
 | `@anweat/dsh-browser` | 0.2.2 | 本地构建 | 浏览器服务（与 headless 同一份 tgz） |
-| `dsh-web-search-pro` | 0.1.16-alpha.1 | 本地构建 | 多引擎 web 搜索工具（与 headless 同一份 tgz） |
-| `dsh-mobile` | 0.6.13 | npm 官方发布 | 手机访问 harness(webServer 网关; **headless 不可用**, 无 webServer 会启动崩溃) |
+| `dsh-web-search-pro` | 0.2.2 | 本地构建 | 多引擎 web 搜索工具（与 headless 同一份 tgz） |
+| `dsh-mobile` | 0.6.16 | npm 官方发布 | 手机访问 harness(webServer 网关; **headless 不可用**, 无 webServer 会启动崩溃) |
 
 > ⚠️ **dsh-mobile 是 web 模式专用**：它的 bundle 注入 `webServer` + `connection`，
 > headless CLI 模式没有这两个服务 → 激活失败 → 启动崩溃。tgz 已烘焙进 `/plugs/`，

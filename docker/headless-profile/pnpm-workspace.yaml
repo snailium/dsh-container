@@ -1,0 +1,12 @@
+# pnpm workspace root for the seeded headless profile.
+#
+# `@anweat/dsh-browser` depends on `@jackwener/opencli`, which ships a postinstall
+# hook (adapter fetch, both commands guarded with `|| true`). pnpm >= 10 runs
+# dependency build scripts only when they are listed here; without this entry the
+# install ends with `ERR_PNPM_IGNORED_BUILDS`, which the entrypoint tolerates but
+# which makes a healthy boot look broken. Allowing the hook keeps the install
+# quiet and offline-safe: the script swallows its own failures.
+packages:
+  - .
+allowBuilds:
+  '@jackwener/opencli': true
