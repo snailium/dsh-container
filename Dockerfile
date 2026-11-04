@@ -6,9 +6,10 @@
 #
 # ⚠️ 单阶段: dsh 是全局 npm 包, bin 依赖同顶层 node_modules 下的兄弟包
 #    (@deepseek-ai/dsh-app-boot 等), 分阶段 COPY 会破坏 ESM 解析。直接在最终
-#    node:22 镜像里安装, 全局包+bin+symlink 原位保留最稳。
+#    node:24 镜像里安装, 全局包+bin+symlink 原位保留最稳。
+#    dsh >=0.2.2-alpha 要求 node >=24.9.0 (engines 字段), 故基础镜像从 22 升到 24。
 
-FROM node:22
+FROM node:24
 # DSH_VERSION 必须由构建者显式提供 —— 不设默认值。
 #   理由: 默认值会静默过期(Dockerfile/compose/.env 三处漂移), 构建出与预期不符的镜像。
 #   未提供时 entrypoint 与 compose 都会 fail-closed 报错(见 docker-compose.yml args 与 entrypoint.sh)。
@@ -51,14 +52,14 @@ RUN sh -c '[ -n "$DSH_VERSION" ] || { \
 # headless 自动化测试: entrypoint 首次启动用 pnpm 安装测试 profile 插件。
 #   pnpm 在镜像构建期 `npm i -g pnpm` 装好(避免运行时 corepack 首次下载挂起)。
 #   插件以 vendor tgz 形式烘焙进镜像 /plugs/, 离线安装(不依赖运行时网络):
-#   - @anweat/dsh-browser@0.2.2 (本地构建; peer 范围 >=0.2.1-rc.2 <0.2.2-0, 适配 dsh 0.2.1-rc.x。
-#     npm 上的 0.2.1 钉 <0.2.1-0, 不兼容 dsh 0.2.1-rc.5, 故用本地放宽 peer 的构建)
-#   - dsh-web-search-pro@0.2.3 (官方发布; 0.2 线 CLI 适配层 + 平台后端链; peer 范围 >=0.2.1-rc.2 <0.2.2-0)
-#   - dsh-repeat-tool-breaker@0.11.7 (官方发布; web_fetch_file 独立组件, curl 默认后端)
-#   - dsh-command-context-trim@0.7.3 (官方发布; 分词器校准 + 按路由 maxTokens 预留输出预算)
-#   - dsh-llm-session-header@0.4.1 (官方发布; 按会话注入稳定路由头: x-opencode-session / X-SMG-Routing-Key)
-#   - dsh-mobile@0.7.1 (官方发布; 手机访问 webServer, 仅 web 模式自建 profile 使用——headless 不装,
-#     无 webServer 服务会启动崩溃。tgz 含预编译 funnel 二进制, ~27MB)
+#   - @anweat/dsh-browser@0.2.2 (本地构建; peer 范围含 >=0.2.2-rc.1 <0.2.3-0, 适配 dsh 0.2.2-rc.x。
+#     npm 上的 0.2.1 钉 <0.2.1-0, 不兼容 rc 线, 故用本地放宽 peer 的构建)
+#   - dsh-web-search-pro@0.2.5 (本地构建; CLI 适配层 + 平台后端链; peer 范围含 >=0.2.2-rc.1 <0.2.3-0)
+#   - dsh-repeat-tool-breaker@0.11.8 (本地构建; web_fetch_file 独立组件, curl 默认后端; peer >=0.2.0-rc.1 <0.2.3-0)
+#   - dsh-command-context-trim@0.7.5 (官方发布; 分词器校准 + 按路由 maxTokens 预留输出预算)
+#   - dsh-llm-session-header@0.4.2 (官方发布; 按会话注入稳定路由头: x-opencode-session / X-SMG-Routing-Key)
+#   - dsh-mobile@0.8.2 (官方发布; 手机访问 webServer, 仅 web 模式自建 profile 使用——headless 不装,
+#     无 webServer 服务会启动崩溃。react ^19.3.0 peer, ~28MB)
 RUN npm i -g pnpm
 
 # 工程内置代码层: TLS relay + entrypoint
